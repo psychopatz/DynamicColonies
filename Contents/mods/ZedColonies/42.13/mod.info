@@ -1,6 +1,0 @@
-name=Zed Colonies
-id=ZedColonies
-description=Labour and Colony building system for Dynamic Trading.
-require=DynamicTradingCommon
-category=features
-versionMin=42.13

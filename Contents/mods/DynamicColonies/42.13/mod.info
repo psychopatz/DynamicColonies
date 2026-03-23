@@ -1,0 +1,8 @@
+name=Dynamic Colonies
+id=DynamicColonies
+description=Colony building system addon for Dynamic Trading.
+require=\DynamicTradingCommon
+loadModAfter=\DynamicTradingCommon
+category=features
+versionMin=42.13
+versionMax=42.15
