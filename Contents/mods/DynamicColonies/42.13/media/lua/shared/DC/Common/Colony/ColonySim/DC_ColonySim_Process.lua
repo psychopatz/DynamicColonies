@@ -462,6 +462,30 @@ function Sim.ProcessWorker(worker, currentHour)
         local didWorkThisTick = false
         local buildResult = nil
         local waitingForProjectMaterials = false
+        local autoAssignedProject = nil
+
+        if hp > 0 and worker.jobEnabled and toolsReady and hasHydration and hasCalories and not forcedRest and not projectState.hasProject then
+            autoAssignedProject = DC_Buildings
+                and DC_Buildings.AssignNextReadyProjectToWorker
+                and DC_Buildings.AssignNextReadyProjectToWorker(worker)
+                or nil
+            if autoAssignedProject then
+                Internal.appendWorkerLog(
+                    worker,
+                    "Automatically moved to "
+                        .. tostring(autoAssignedProject.buildingType or "Project")
+                        .. " L"
+                        .. tostring(autoAssignedProject.targetLevel or 1)
+                        .. ".",
+                    currentHour,
+                    "buildings"
+                )
+                projectState = DC_Buildings.GetProjectDisplayState(worker.ownerUsername, worker.workerID) or {
+                    hasProject = true,
+                    label = tostring(autoAssignedProject.buildingType or "Project")
+                }
+            end
+        end
 
         if hp <= 0 then
             Internal.markWorkerDead(worker, currentHour, normalizedJobType, Config.PresenceStates.Home, hasCalories, hasHydration)
@@ -497,6 +521,22 @@ function Sim.ProcessWorker(worker, currentHour)
                     currentHour,
                     "buildings"
                 )
+                projectState = DC_Buildings.GetProjectDisplayState(worker.ownerUsername, worker.workerID) or {
+                    hasProject = false,
+                    label = "No Project"
+                }
+                if buildResult.nextProject then
+                    Internal.appendWorkerLog(
+                        worker,
+                        "Automatically moved to "
+                            .. tostring(buildResult.nextProject.buildingType or "Project")
+                            .. " L"
+                            .. tostring(buildResult.nextProject.targetLevel or 1)
+                            .. ".",
+                        currentHour,
+                        "buildings"
+                    )
+                end
             end
         end
 

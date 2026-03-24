@@ -66,22 +66,17 @@ function Energy.CompleteForcedRest(worker, currentHour, message)
 
     local energy = Energy.EnsureWorkerEnergy(worker)
     local fullyRested = Energy.GetCurrent(worker) + 0.0001 >= Energy.GetMax(worker)
-    local timedOut = false
-    
-    if energy and energy.restStartedHour then
-        local elapsed = currentHour - energy.restStartedHour
-        if elapsed >= 10 then
-            timedOut = true
-        end
-    end
 
-    if not fullyRested and not timedOut then
+    if not fullyRested then
         return false
     end
 
     local finalMessage = message
-    if timedOut and not fullyRested then
-        finalMessage = "Woke up after 10 hours of rest."
+    if energy and energy.restStartedHour then
+        local elapsed = currentHour - energy.restStartedHour
+        if elapsed > 0 then
+            finalMessage = string.format("Rested for %.1f hours.", elapsed)
+        end
     end
 
     local changed = Energy.SetForcedRest(worker, false)

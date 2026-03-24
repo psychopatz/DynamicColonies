@@ -75,6 +75,53 @@ local function releaseWorkerFromCurrentProject(worker, options)
     return currentProject
 end
 
+local function getProjectSequence(project)
+    local suffix = tostring(project and project.projectID or ""):match("(%d+)$")
+    return math.max(0, math.floor(tonumber(suffix) or 0))
+end
+
+function Buildings.AssignNextReadyProjectToWorker(worker)
+    if not worker or not worker.workerID then
+        return nil
+    end
+    if Buildings.GetProjectForWorker and Buildings.GetProjectForWorker(worker) then
+        return nil
+    end
+
+    local labourConfig = getColonyConfig()
+    local owner = labourConfig.GetOwnerUsername and labourConfig.GetOwnerUsername(worker.ownerUsername) or tostring(worker.ownerUsername or "local")
+    if Buildings.RefreshOwnerProjectMaterials then
+        Buildings.RefreshOwnerProjectMaterials(owner)
+    end
+
+    local candidates = {}
+    for _, project in pairs(Buildings.GetProjectsForOwner(owner) or {}) do
+        if tostring(project and project.status or "") == "Active"
+            and tostring(project and project.assignedBuilderID or "") == ""
+            and tostring(project and project.materialState or "") ~= "Stalled" then
+            candidates[#candidates + 1] = project
+        end
+    end
+
+    table.sort(candidates, function(a, b)
+        local aHours = tonumber(a and a.startedWorldHours) or 0
+        local bHours = tonumber(b and b.startedWorldHours) or 0
+        if math.abs(aHours - bHours) > 0.0001 then
+            return aHours < bHours
+        end
+        return getProjectSequence(a) < getProjectSequence(b)
+    end)
+
+    local nextProject = candidates[1]
+    if not nextProject then
+        return nil
+    end
+
+    nextProject.assignedBuilderID = worker.workerID
+    Buildings.Save()
+    return nextProject
+end
+
 function Buildings.EnsureInitialHeadquartersProject(ownerUsername)
     local labourConfig = getColonyConfig()
     local owner = labourConfig.GetOwnerUsername and labourConfig.GetOwnerUsername(ownerUsername) or tostring(ownerUsername or "local")
@@ -288,6 +335,7 @@ function Buildings.ProcessWorkerProject(worker, currentHour, workableHours, spee
     if project.progressWorkPoints + 0.0001 >= math.max(1, tonumber(project.requiredWorkPoints) or 1) then
         result.completed = true
         result.instance = Buildings.CompleteProject(project)
+        result.nextProject = Buildings.AssignNextReadyProjectToWorker(worker)
 
         local skills = getSkills()
         if skills and skills.GrantXP then

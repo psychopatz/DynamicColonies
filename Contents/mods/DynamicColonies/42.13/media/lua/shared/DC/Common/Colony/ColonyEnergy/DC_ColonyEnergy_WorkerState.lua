@@ -77,7 +77,7 @@ function Energy.EnsureWorkerEnergy(worker)
     energy.drainSources = copyNumericMap(energy.drainSources, "base")
     energy.lastReason = energy.lastReason or nil
     
-    -- Track when rest started to enforce the 10-hour cap
+    -- Track when rest started for logging duration
     energy.restStartedHour = tonumber(energy.restStartedHour) or nil
 
     worker.energy = energy
@@ -138,7 +138,7 @@ function Energy.SetForcedRest(worker, forcedRest, reason, currentHour)
         energy.lastReason = reason or energy.lastReason or (Config.ReturnReasons and (Config.ReturnReasons.LowEnergy or Config.ReturnReasons.LowTiredness)) or "LowEnergy"
         -- Mark rest start time if just starting
         if changed then
-            energy.restStartedHour = tonumber(currentHour) or nil
+            energy.restStartedHour = tonumber(currentHour) or (Config.GetCurrentWorldHours and Config.GetCurrentWorldHours()) or nil
         end
     elseif changed then
         energy.lastReason = nil

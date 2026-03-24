@@ -8,7 +8,7 @@ Config.DEFAULT_ENERGY_LOW_THRESHOLD_RATIO = 0.10
 Config.DEFAULT_ENERGY_WORK_DRAIN_PER_HOUR = 8
 Config.DEFAULT_ENERGY_SCAVENGE_WORK_DRAIN_MULTIPLIER = 1.15
 Config.DEFAULT_ENERGY_TRAVEL_DRAIN_PER_HOUR = 2
-Config.DEFAULT_ENERGY_HOME_RECOVERY_PER_HOUR = 12
+Config.DEFAULT_ENERGY_HOME_RECOVERY_PER_HOUR = 10
 
 -- Backwards compatibility
 Config.DEFAULT_TIREDNESS_MAX = Config.DEFAULT_ENERGY_MAX
@@ -44,7 +44,7 @@ function Config.GetEnergyTravelDrainPerHour(worker, profile)
 end
 
 function Config.GetEnergyHomeRecoveryPerHour(worker, profile)
-    return math.max(0, tonumber(Config.DEFAULT_ENERGY_HOME_RECOVERY_PER_HOUR) or 12)
+    return math.max(0, tonumber(Config.DEFAULT_ENERGY_HOME_RECOVERY_PER_HOUR) or 10)
 end
 
 -- Aliases for Tiredness functions

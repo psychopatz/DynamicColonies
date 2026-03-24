@@ -4,7 +4,7 @@ DC_Buildings.Config = DC_Buildings.Config or {}
 local Config = DC_Buildings.Config
 
 Config.MOD_DATA_KEY = "DynamicTrading_Buildings"
-Config.DEFAULT_UNHOUSED_RECOVERY_MULTIPLIER = 0.33
+Config.DEFAULT_UNHOUSED_RECOVERY_MULTIPLIER = 1.00
 Config.DEFAULT_BARRACKS_CAPACITY = 4
 Config.DEFAULT_INFIRMARY_BASE_CAPACITY = 1
 Config.DEFAULT_BUILDER_BASE_WORK_POINTS_PER_HOUR = 1.0
@@ -54,7 +54,7 @@ Config.Definitions = {
                 },
                 effects = {
                     housingSlots = 4,
-                    recoveryMultiplier = 1.00
+                    recoveryMultiplier = 1.33
                 }
             },
             [2] = {
@@ -70,7 +70,7 @@ Config.Definitions = {
                 },
                 effects = {
                     housingSlots = 4,
-                    recoveryMultiplier = 1.20
+                    recoveryMultiplier = 1.66
                 }
             },
             [3] = {
@@ -86,7 +86,7 @@ Config.Definitions = {
                 },
                 effects = {
                     housingSlots = 4,
-                    recoveryMultiplier = 1.40
+                    recoveryMultiplier = 2.00
                 }
             }
         }
