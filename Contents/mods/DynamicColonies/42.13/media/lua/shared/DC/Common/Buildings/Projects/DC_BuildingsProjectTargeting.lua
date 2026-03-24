@@ -172,15 +172,15 @@ local function getAvailableMaterialCounts(ownerUsername, sourcePlayer)
     )
 end
 
-local function buildRecipeAvailability(ownerUsername, recipe, sourcePlayer)
-    local availableCounts = getAvailableMaterialCounts(ownerUsername, sourcePlayer)
+local function buildRecipeAvailability(ownerUsername, recipe, sourcePlayer, availableCounts)
+    local resolvedAvailableCounts = availableCounts or getAvailableMaterialCounts(ownerUsername, sourcePlayer)
     local entries = {}
     local hasAll = true
 
     for _, entry in ipairs(recipe or {}) do
         local fullType = tostring(entry.fullType or "")
         local required = math.max(0, math.floor(tonumber(entry.count) or 0))
-        local available = availableCounts[fullType] or 0
+        local available = resolvedAvailableCounts[fullType] or 0
         local recipeEntry = {
             fullType = fullType,
             displayName = getDisplayName(fullType),
@@ -291,11 +291,11 @@ local function pullProjectMaterialsFromWarehouse(project)
     return moved
 end
 
-local function buildProjectMaterialStatus(project, sourcePlayer)
+local function buildProjectMaterialStatus(project, sourcePlayer, availableCounts)
     ensureProjectMaterialTracking(project)
 
     local owner = project and getOwnerUsername(project.ownerUsername) or nil
-    local availableCounts = owner and getAvailableMaterialCounts(owner, sourcePlayer) or {}
+    local resolvedAvailableCounts = availableCounts or (owner and getAvailableMaterialCounts(owner, sourcePlayer) or {})
     local entries = {}
     local hasAll = true
     local totalRequired = countRecipeUnits(project and project.recipe or {})
@@ -305,7 +305,7 @@ local function buildProjectMaterialStatus(project, sourcePlayer)
         local fullType = tostring(entry.fullType or "")
         local required = math.max(0, math.floor(tonumber(entry.count) or 0))
         local supplied = math.min(required, math.max(0, tonumber(project and project.materialCounts and project.materialCounts[fullType]) or 0))
-        local available = math.max(0, availableCounts[fullType] or 0)
+        local available = math.max(0, resolvedAvailableCounts[fullType] or 0)
         local remaining = math.max(0, required - supplied)
         local recipeEntry = {
             fullType = fullType,
@@ -454,6 +454,29 @@ local function findWarehouseBuildProjectInRing(ownerUsername, ring)
     return nil
 end
 
+local function hasCompletedOuterBarricade(ownerUsername, plotX, plotY)
+    local owner = getOwnerUsername(ownerUsername)
+    local x = math.floor(tonumber(plotX) or 0)
+    local y = math.floor(tonumber(plotY) or 0)
+    local ring = Buildings.GetPlotRing and Buildings.GetPlotRing(x, y) or 0
+    local nextRingCoords = Buildings.GetRingCoordinates and Buildings.GetRingCoordinates(ring + 1) or {}
+
+    for _, cell in ipairs(nextRingCoords) do
+        local dx = math.abs(math.floor(tonumber(cell.x) or 0) - x)
+        local dy = math.abs(math.floor(tonumber(cell.y) or 0) - y)
+        if dx <= 1 and dy <= 1 then
+            local instance = Buildings.FindBuildingAtPlot and Buildings.FindBuildingAtPlot(owner, cell.x, cell.y) or nil
+            if instance
+                and tostring(instance.buildingType or "") == "Barricade"
+                and math.floor(tonumber(instance.level) or 0) > 0 then
+                return true
+            end
+        end
+    end
+
+    return false
+end
+
 local function buildBasePreview(owner, buildingType, mode, plotX, plotY, buildingID, installKey)
     local definition = Config.GetDefinition(buildingType)
     return {
@@ -590,16 +613,17 @@ function Buildings.ResolveProjectTarget(ownerUsername, buildingType, mode, plotX
             return nil, "Build Headquarters first."
         end
         if not Buildings.IsFrontierPlot or not Buildings.IsFrontierPlot(owner, x, y) then
-            return nil, "Barricades can only be built on locked frontier plots."
+            return nil, "Barricades can only be built on the active frontier perimeter."
         end
 
         local activeBarricades = Buildings.GetActiveBarricadeCount and Buildings.GetActiveBarricadeCount(owner) or 0
         local maxBarricades = Buildings.GetMaxActiveBarricades and Buildings.GetMaxActiveBarricades(owner) or 0
+        local frontierRing = Buildings.GetActiveFrontierRing and Buildings.GetActiveFrontierRing(owner) or (Buildings.GetPlotRing and Buildings.GetPlotRing(x, y) or 1)
         if maxBarricades <= 0 then
-            return nil, "Upgrade Headquarters to unlock barricade capacity."
+            return nil, "Unsafe-zone control is unavailable for ring " .. tostring(frontierRing) .. "."
         end
         if activeBarricades >= maxBarricades then
-            return nil, "Headquarters barricade capacity is full."
+            return nil, "Frontier ring " .. tostring(frontierRing) .. " is at capacity."
         end
 
         return {
@@ -697,8 +721,8 @@ function Buildings.GetProjectByID(ownerUsername, projectID)
     return nil
 end
 
-function Buildings.GetProjectMaterialStatus(project, sourcePlayer)
-    return buildProjectMaterialStatus(project, sourcePlayer)
+function Buildings.GetProjectMaterialStatus(project, sourcePlayer, availableCounts)
+    return buildProjectMaterialStatus(project, sourcePlayer, availableCounts)
 end
 
 function Buildings.RefreshProjectMaterialState(project)
@@ -770,12 +794,12 @@ function Buildings.GetProjectDisplayState(ownerUsername, workerID)
     }
 end
 
-function Buildings.GetRecipeAvailability(ownerUsername, buildingType, targetLevel, mode, installKey, sourcePlayer)
+function Buildings.GetRecipeAvailability(ownerUsername, buildingType, targetLevel, mode, installKey, sourcePlayer, availableCounts)
     local projectDefinition = getProjectDefinition(buildingType, targetLevel, mode, installKey)
-    return buildRecipeAvailability(ownerUsername, projectDefinition and projectDefinition.recipe or {}, sourcePlayer)
+    return buildRecipeAvailability(ownerUsername, projectDefinition and projectDefinition.recipe or {}, sourcePlayer, availableCounts)
 end
 
-function Buildings.BuildProjectPreview(ownerUsername, buildingType, mode, plotX, plotY, buildingID, installKey, sourcePlayer)
+function Buildings.BuildProjectPreview(ownerUsername, buildingType, mode, plotX, plotY, buildingID, installKey, sourcePlayer, availableCounts)
     local owner = getOwnerUsername(ownerUsername)
     local preview = buildBasePreview(owner, buildingType, mode, plotX, plotY, buildingID, installKey)
     local target, targetReason = Buildings.ResolveProjectTarget(owner, buildingType, mode, plotX, plotY, buildingID, installKey)
@@ -804,7 +828,7 @@ function Buildings.BuildProjectPreview(ownerUsername, buildingType, mode, plotX,
     preview.installKey = tostring(target.installKey or preview.installKey or "")
     preview.installDisplayName = normalizeMode(target.mode) == "install" and getProjectDisplayName(buildingType, target.mode, target.installKey) or nil
     preview.workPoints = math.max(1, math.floor(tonumber(projectDefinition.workPoints) or 1))
-    preview.recipeAvailability = buildRecipeAvailability(owner, projectDefinition.recipe, sourcePlayer)
+    preview.recipeAvailability = buildRecipeAvailability(owner, projectDefinition.recipe, sourcePlayer, availableCounts)
     preview.effects = Internal.CopyDeep(projectDefinition.effects or {})
     preview.currentInstallCount = math.max(0, math.floor(tonumber(target.currentInstallCount) or 0))
     preview.maxInstallCount = math.max(0, math.floor(tonumber(target.maxInstallCount) or 0))
@@ -814,20 +838,17 @@ function Buildings.BuildProjectPreview(ownerUsername, buildingType, mode, plotX,
     return preview
 end
 
-function Buildings.BuildPlotBuildOptions(ownerUsername, plotX, plotY, sourcePlayer)
+function Buildings.BuildPlotBuildOptions(ownerUsername, plotX, plotY, sourcePlayer, availableCounts)
     local owner = getOwnerUsername(ownerUsername)
     local plot, state = Buildings.GetPlotWithState(owner, plotX, plotY)
     local options = {}
 
-    if tostring(state or "") == tostring(Buildings.MapConstants.PlotStates.Locked) then
-        if not (Buildings.IsFrontierPlot and Buildings.IsFrontierPlot(owner, plotX, plotY)) then
-            return options
-        end
-
+    if Buildings.IsFrontierPlot and Buildings.IsFrontierPlot(owner, plotX, plotY) then
         local definition = Config.GetDefinition and Config.GetDefinition("Barricade") or nil
-        local preview = Buildings.BuildProjectPreview(owner, "Barricade", "build", plotX, plotY, nil, nil, sourcePlayer)
+        local preview = Buildings.BuildProjectPreview(owner, "Barricade", "build", plotX, plotY, nil, nil, sourcePlayer, availableCounts)
         local effectLines = {
-            "Claims this frontier tile and uses 1 barricade slot."
+            "Secures this active perimeter tile and uses 1 slot on the current frontier ring.",
+            "Complete every barricade slot on the current ring to reveal the next ring."
         }
         if preview.effects and preview.effects.ringDistance then
             effectLines[#effectLines + 1] = "Ring Distance: " .. tostring(preview.effects.ringDistance)
@@ -843,7 +864,7 @@ function Buildings.BuildPlotBuildOptions(ownerUsername, plotX, plotY, sourcePlay
             enabled = preview.available == true,
             disabledReason = preview.available == true and nil or preview.reason,
             preview = preview,
-            description = "Secures and claims one adjacent locked tile. Demolish older barricades to free interior plots as your border moves outward.",
+            description = "Secures one slot on the active perimeter ring. Older barricades unlock for removal once the next ring has taken over outside them.",
             effectLines = effectLines
         }
 
@@ -856,16 +877,14 @@ function Buildings.BuildPlotBuildOptions(ownerUsername, plotX, plotY, sourcePlay
 
     for _, definition in ipairs(Config.GetDefinitionList and Config.GetDefinitionList() or {}) do
         if tostring(definition and definition.buildingType or "") ~= "Barricade" then
-        local preview = Buildings.BuildProjectPreview(ownerUsername, definition.buildingType, "build", plotX, plotY, nil, nil, sourcePlayer)
+        local preview = Buildings.BuildProjectPreview(ownerUsername, definition.buildingType, "build", plotX, plotY, nil, nil, sourcePlayer, availableCounts)
         local description = "Placeholder building."
         local effectLines = {}
 
         if definition.buildingType == "Headquarters" then
-            description = "Establishes the settlement core. Upgrading Headquarters increases how many barricade frontier tiles can exist at once."
-            effectLines[#effectLines + 1] = "Barricade Capacity: " .. tostring(preview.effects and preview.effects.maxActiveBarricades or 0)
-            if tonumber(preview.effects and preview.effects.barricadeCapDelta) and tonumber(preview.effects and preview.effects.barricadeCapDelta) > 0 then
-                effectLines[#effectLines + 1] = "Upgrade Gain: +" .. tostring(preview.effects.barricadeCapDelta) .. " barricade slots"
-            end
+            description = "Establishes the settlement core. Unsafe-zone growth expands in circular frontier rings as you secure barricades around the perimeter."
+            effectLines[#effectLines + 1] = "Expansion Rule: complete every barricade slot on the current ring to reveal the next ring"
+            effectLines[#effectLines + 1] = "Frontier Capacity: scales with the active ring perimeter"
         elseif definition.buildingType == "Barracks" then
             description = "Provides housing for your workers and improves recovery for the occupants living inside."
             if preview.effects and preview.effects.housingSlots then
@@ -908,7 +927,7 @@ function Buildings.BuildPlotBuildOptions(ownerUsername, plotX, plotY, sourcePlay
     return options
 end
 
-function Buildings.BuildBuildingInstallOptions(ownerUsername, plotX, plotY, buildingID, sourcePlayer)
+function Buildings.BuildBuildingInstallOptions(ownerUsername, plotX, plotY, buildingID, sourcePlayer, availableCounts)
     local owner = getOwnerUsername(ownerUsername)
     local instance = Buildings.FindBuildingAtPlot(owner, plotX, plotY)
     local options = {}
@@ -917,7 +936,7 @@ function Buildings.BuildBuildingInstallOptions(ownerUsername, plotX, plotY, buil
     end
 
     for _, definition in ipairs(Config.GetInstallDefinitionList and Config.GetInstallDefinitionList(instance.buildingType) or {}) do
-        local preview = Buildings.BuildProjectPreview(owner, instance.buildingType, "install", plotX, plotY, buildingID, definition.installKey, sourcePlayer)
+        local preview = Buildings.BuildProjectPreview(owner, instance.buildingType, "install", plotX, plotY, buildingID, definition.installKey, sourcePlayer, availableCounts)
         local currentCount = Buildings.GetBuildingInstallCount(instance, definition.installKey)
         local maxCount = Config.GetInstallMaxCount and Config.GetInstallMaxCount(instance.buildingType, definition.installKey, instance.level)
             or math.max(0, math.floor(tonumber(definition.maxCount) or 0))
@@ -991,9 +1010,15 @@ function Buildings.CanDestroyBuilding(ownerUsername, plotX, plotY, buildingID)
     if Buildings.GetActiveProjectAtPlot(owner, x, y) then
         return false, "You cannot destroy a building while a project is active on that plot.", nil
     end
+    if tostring(building.buildingType or "") == "Barricade" then
+        if not hasCompletedOuterBarricade(owner, x, y) then
+            return false, "This barricade stays locked until the next ring has a completed barricade enclosing it from outside.", nil
+        end
+    end
     return true, nil, building
 end
 
 Internal.BuildingsConsumeRecipe = consumeRecipe
+Internal.GetAvailableMaterialCounts = getAvailableMaterialCounts
 
 return Buildings

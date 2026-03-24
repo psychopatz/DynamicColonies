@@ -14,6 +14,7 @@ DC_BuildingsWindow = ISCollapsableWindow:derive("DC_BuildingsWindow")
 DC_BuildingsWindow.instance = DC_BuildingsWindow.instance or nil
 DC_BuildingsWindow.cachedSnapshot = DC_BuildingsWindow.cachedSnapshot or nil
 DC_BuildingsWindow.EventsAdded = DC_BuildingsWindow.EventsAdded or false
+DC_BuildingsWindow.AUTO_REFRESH_FRAMES = 600
 
 function DC_BuildingsWindow:getOwnerWindow()
     if self.ownerWindow and self.ownerWindow.sendColonyCommand then
@@ -288,9 +289,6 @@ function DC_BuildingsWindow:createChildren()
             self:onInstallPlot(plot)
         end,
         function(plot)
-            self:onSupplyProject(plot)
-        end,
-        function(plot)
             self:onSwapProjectBuilder(plot)
         end,
         function(plot)
@@ -315,7 +313,7 @@ end
 function DC_BuildingsWindow:prerender()
     ISCollapsableWindow.prerender(self)
     self.autoRefreshFrames = (tonumber(self.autoRefreshFrames) or 0) + 1
-    if self.autoRefreshFrames >= 180 then
+    if self.autoRefreshFrames >= (tonumber(self.AUTO_REFRESH_FRAMES) or DC_BuildingsWindow.AUTO_REFRESH_FRAMES or 600) then
         self.autoRefreshFrames = 0
         self:requestSnapshot()
     end

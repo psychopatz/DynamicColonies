@@ -283,6 +283,7 @@ function DC_BuildingProjectModal:onSupplyClicked()
         buildingID = self.preview.buildingID,
         installKey = self.preview.installKey
     })
+    self:close()
 end
 
 function DC_BuildingProjectModal:onCancelClicked()

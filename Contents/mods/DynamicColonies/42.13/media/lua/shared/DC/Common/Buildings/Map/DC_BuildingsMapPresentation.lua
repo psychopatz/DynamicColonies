@@ -15,7 +15,7 @@ local function getRegistry()
     return DC_Colony and DC_Colony.Registry or nil
 end
 
-local function summarizeProject(project, sourcePlayer)
+local function summarizeProject(project, sourcePlayer, availableCounts)
     if not project then
         return nil
     end
@@ -30,7 +30,7 @@ local function summarizeProject(project, sourcePlayer)
         or nil
     local progress = math.max(0, tonumber(project.progressWorkPoints) or 0)
     local required = math.max(1, tonumber(project.requiredWorkPoints) or 1)
-    local materialStatus = Buildings.GetProjectMaterialStatus and Buildings.GetProjectMaterialStatus(project, sourcePlayer) or {
+    local materialStatus = Buildings.GetProjectMaterialStatus and Buildings.GetProjectMaterialStatus(project, sourcePlayer, availableCounts) or {
         hasAll = true,
         entries = {},
         progressRatio = 1
@@ -77,10 +77,11 @@ function Buildings.BuildMapSnapshot(ownerUsername, sourcePlayer)
     end
 
     local activeProjects = Buildings.GetOwnerProjectList(owner)
+    local availableCounts = Internal and Internal.GetAvailableMaterialCounts and Internal.GetAvailableMaterialCounts(owner, sourcePlayer) or nil
     local projectsByPlotKey = {}
     local visiblePlotKeys = {}
     for _, project in ipairs(activeProjects) do
-        projectsByPlotKey[Buildings.GetPlotKey(project.plotX, project.plotY)] = summarizeProject(project, sourcePlayer)
+        projectsByPlotKey[Buildings.GetPlotKey(project.plotX, project.plotY)] = summarizeProject(project, sourcePlayer, availableCounts)
         visiblePlotKeys[Buildings.GetPlotKey(project.plotX, project.plotY)] = {
             x = math.floor(tonumber(project.plotX) or 0),
             y = math.floor(tonumber(project.plotY) or 0)
@@ -112,7 +113,7 @@ function Buildings.BuildMapSnapshot(ownerUsername, sourcePlayer)
         local isFrontierPlot = Buildings.IsFrontierPlot and Buildings.IsFrontierPlot(owner, x, y) or false
         local canEvaluateBuildOptions = (tostring(state or "") == tostring(Buildings.MapConstants.PlotStates.Empty) and plot.unlocked == true)
             or (tostring(state or "") == tostring(Buildings.MapConstants.PlotStates.Locked) and isFrontierPlot)
-        local buildOptions = canEvaluateBuildOptions and Buildings.BuildPlotBuildOptions and Buildings.BuildPlotBuildOptions(owner, x, y, sourcePlayer) or {}
+        local buildOptions = canEvaluateBuildOptions and Buildings.BuildPlotBuildOptions and Buildings.BuildPlotBuildOptions(owner, x, y, sourcePlayer, availableCounts) or {}
 
         local plotEntry = {
             key = key,
@@ -135,8 +136,8 @@ function Buildings.BuildMapSnapshot(ownerUsername, sourcePlayer)
         }
 
         if building then
-            local upgradePreview = Buildings.BuildProjectPreview(owner, building.buildingType, "upgrade", x, y, building.buildingID, nil, sourcePlayer)
-            local installOptions = Buildings.BuildBuildingInstallOptions and Buildings.BuildBuildingInstallOptions(owner, x, y, building.buildingID, sourcePlayer) or {}
+            local upgradePreview = Buildings.BuildProjectPreview(owner, building.buildingType, "upgrade", x, y, building.buildingID, nil, sourcePlayer, availableCounts)
+            local installOptions = Buildings.BuildBuildingInstallOptions and Buildings.BuildBuildingInstallOptions(owner, x, y, building.buildingID, sourcePlayer, availableCounts) or {}
             local canDestroy, destroyReason = Buildings.CanDestroyBuilding(owner, x, y, building.buildingID)
             local currentLevelDefinition = Config.GetLevelDefinition and Config.GetLevelDefinition(building.buildingType, building.level) or nil
             if tostring(building.buildingType or "") == "Barricade"

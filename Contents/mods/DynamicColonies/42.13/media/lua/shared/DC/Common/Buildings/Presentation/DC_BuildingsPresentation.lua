@@ -31,6 +31,7 @@ function Buildings.BuildOwnerSnapshot(ownerUsername, sourcePlayer)
     local housing = Buildings.BuildHousingAssignment(owner)
     local medical = Buildings.BuildInfirmaryAssignment and Buildings.BuildInfirmaryAssignment(owner) or nil
     local projectList = Buildings.GetOwnerProjectList(owner)
+    local availableCounts = Internal and Internal.GetAvailableMaterialCounts and Internal.GetAvailableMaterialCounts(owner, sourcePlayer) or nil
     local buildings = {}
 
     for _, definition in ipairs(Config.GetDefinitionList and Config.GetDefinitionList() or {}) do
@@ -100,7 +101,7 @@ function Buildings.BuildOwnerSnapshot(ownerUsername, sourcePlayer)
 
     local activeProjects = {}
     for _, project in ipairs(projectList) do
-        local materialStatus = Buildings.GetProjectMaterialStatus and Buildings.GetProjectMaterialStatus(project, sourcePlayer) or {
+        local materialStatus = Buildings.GetProjectMaterialStatus and Buildings.GetProjectMaterialStatus(project, sourcePlayer, availableCounts) or {
             hasAll = true,
             entries = {},
             progressRatio = 1

@@ -1,4 +1,5 @@
 DC_BuildingsUIUtils = DC_BuildingsUIUtils or {}
+DC_BuildingsUIUtils.TextureCache = DC_BuildingsUIUtils.TextureCache or {}
 
 DC_BuildingsUIUtils.Colors = {
     locked = { r = 0.12, g = 0.12, b = 0.12, a = 0.9 },
@@ -127,7 +128,15 @@ function DC_BuildingsUIUtils.GetTexture(path)
     if not path or not getTexture then
         return nil
     end
-    return getTexture(path)
+    if DC_BuildingsUIUtils.TextureCache[path] == nil then
+        DC_BuildingsUIUtils.TextureCache[path] = getTexture(path) or false
+    end
+
+    local texture = DC_BuildingsUIUtils.TextureCache[path]
+    if texture == false then
+        return nil
+    end
+    return texture
 end
 
 function DC_BuildingsUIUtils.GetOptionStatusLabel(option)

@@ -27,6 +27,58 @@ local function getCardinalDirections()
     }
 end
 
+local function hasCompletedBarricadeAt(ownerUsername, plotX, plotY)
+    local x = math.floor(tonumber(plotX) or 0)
+    local y = math.floor(tonumber(plotY) or 0)
+    local instance = Buildings.FindBuildingAtPlot and Buildings.FindBuildingAtPlot(ownerUsername, x, y) or nil
+    return instance
+        and tostring(instance.buildingType or "") == "Barricade"
+        and math.floor(tonumber(instance.level) or 0) > 0
+        or false
+end
+
+local function isRingSecured(ownerUsername, ring)
+    local safeRing = math.max(1, math.floor(tonumber(ring) or 1))
+    local ringCoords = Buildings.GetRingCoordinates and Buildings.GetRingCoordinates(safeRing) or {}
+    for _, cell in ipairs(ringCoords) do
+        if not hasCompletedBarricadeAt(ownerUsername, cell.x, cell.y) then
+            return false
+        end
+    end
+    return #ringCoords > 0
+end
+
+local function hasUnlockedSupportingNeighbor(ownerUsername, plotX, plotY)
+    local x = math.floor(tonumber(plotX) or 0)
+    local y = math.floor(tonumber(plotY) or 0)
+
+    for _, direction in ipairs(getCardinalDirections()) do
+        local neighborX = x + direction.x
+        local neighborY = y + direction.y
+        local neighbor = Buildings.GetStoredPlotForOwner(ownerUsername, neighborX, neighborY)
+        if neighbor and neighbor.unlocked == true then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function getActiveFrontierRing(ownerUsername)
+    local safeOwner = getOwnerUsername(ownerUsername)
+    local ring = 1
+
+    while isRingSecured(safeOwner, ring) do
+        ring = ring + 1
+    end
+
+    return ring
+end
+
+function Buildings.GetActiveFrontierRing(ownerUsername)
+    return getActiveFrontierRing(ownerUsername)
+end
+
 function Buildings.GetUnlockedPlotEntries(ownerUsername)
     local owner = getOwnerUsername(ownerUsername)
     local mapData = Buildings.GetMapDataForOwner(owner)
@@ -50,16 +102,20 @@ end
 function Buildings.GetMaxActiveBarricades(ownerUsername)
     local owner = getOwnerUsername(ownerUsername)
     local frontierConfig = Config and Config.Frontier or nil
-    local headquartersLevel = Buildings.GetHeadquartersLevel(owner)
-    return frontierConfig and frontierConfig.GetMaxActiveBarricades and frontierConfig.GetMaxActiveBarricades(headquartersLevel) or 0
+    local currentRing = getActiveFrontierRing(owner)
+    local ringCap = frontierConfig and frontierConfig.GetRingBarricadeCapacity and frontierConfig.GetRingBarricadeCapacity(currentRing) or 0
+    return ringCap
 end
 
 function Buildings.GetActiveBarricadeCount(ownerUsername)
     local owner = getOwnerUsername(ownerUsername)
+    local currentRing = getActiveFrontierRing(owner)
     local count = 0
 
     for _, instance in ipairs(Buildings.GetBuildingsForOwner(owner) or {}) do
         if tostring(instance and instance.buildingType or "") == "Barricade"
+            and Buildings.GetPlotRing
+            and Buildings.GetPlotRing(instance.plotX, instance.plotY) == currentRing
             and math.floor(tonumber(instance and instance.level) or 0) > 0 then
             count = count + 1
         end
@@ -67,6 +123,8 @@ function Buildings.GetActiveBarricadeCount(ownerUsername)
 
     for _, project in pairs(Buildings.GetProjectsForOwner(owner) or {}) do
         if tostring(project and project.status or "") == "Active"
+            and Buildings.GetPlotRing
+            and Buildings.GetPlotRing(project.plotX, project.plotY) == currentRing
             and tostring(project and project.buildingType or "") == "Barricade" then
             count = count + 1
         end
@@ -79,30 +137,29 @@ function Buildings.IsFrontierPlot(ownerUsername, plotX, plotY)
     local owner = getOwnerUsername(ownerUsername)
     local x = math.floor(tonumber(plotX) or 0)
     local y = math.floor(tonumber(plotY) or 0)
+    local targetRing = getActiveFrontierRing(owner)
     local plot, state, building, project = Buildings.GetPlotWithState(owner, x, y)
 
     if not plot or tostring(plot.kind or "") ~= tostring(Buildings.MapConstants.PlotKinds.Standard) then
         return false
     end
-    if tostring(state or "") ~= tostring(Buildings.MapConstants.PlotStates.Locked) then
+    if Buildings.GetPlotRing and Buildings.GetPlotRing(x, y) ~= targetRing then
+        return false
+    end
+    if tostring(state or "") ~= tostring(Buildings.MapConstants.PlotStates.Locked)
+        and tostring(state or "") ~= tostring(Buildings.MapConstants.PlotStates.Empty) then
         return false
     end
     if building or project then
         return false
     end
 
-    for _, direction in ipairs(getCardinalDirections()) do
-        local neighbor = Buildings.GetStoredPlotForOwner(owner, x + direction.x, y + direction.y)
-        if neighbor and neighbor.unlocked == true then
-            return true
-        end
-    end
-
-    return false
+    return hasUnlockedSupportingNeighbor(owner, x, y)
 end
 
 function Buildings.GetFrontierCandidatePlots(ownerUsername)
     local owner = getOwnerUsername(ownerUsername)
+    local targetRing = getActiveFrontierRing(owner)
     local candidates = {}
     local seen = {}
 
@@ -111,7 +168,10 @@ function Buildings.GetFrontierCandidatePlots(ownerUsername)
             local nextX = math.floor(tonumber(plot.x) or 0) + direction.x
             local nextY = math.floor(tonumber(plot.y) or 0) + direction.y
             local key = Buildings.GetPlotKey(nextX, nextY)
-            if not seen[key] and Buildings.IsFrontierPlot(owner, nextX, nextY) then
+            if not seen[key]
+                and Buildings.GetPlotRing
+                and Buildings.GetPlotRing(nextX, nextY) == targetRing
+                and Buildings.IsFrontierPlot(owner, nextX, nextY) then
                 seen[key] = true
                 local candidate = Buildings.BuildVisiblePlot(owner, nextX, nextY)
                 candidate.frontierCandidate = true
@@ -128,12 +188,14 @@ function Buildings.GetTerritorySummary(ownerUsername)
     local owner = getOwnerUsername(ownerUsername)
     local unlockedPlots = Buildings.GetUnlockedPlotEntries(owner)
     local headquartersLevel = Buildings.GetHeadquartersLevel(owner)
+    local currentFrontierRing = getActiveFrontierRing(owner)
     local activeBarricades = Buildings.GetActiveBarricadeCount(owner)
     local maxBarricades = Buildings.GetMaxActiveBarricades(owner)
 
     return {
         ownerUsername = owner,
         headquartersLevel = headquartersLevel,
+        currentFrontierRing = currentFrontierRing,
         unlockedPlotCount = #unlockedPlots,
         activeBarricadeCount = activeBarricades,
         maxActiveBarricades = maxBarricades

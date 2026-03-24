@@ -71,7 +71,9 @@ function Renderer.Draw(panel, snapshot, viewportState, selectedPlotKey)
     panel:drawText("Settlement Map", 10, 8, 1, 1, 1, 1, UIFont.Medium)
     panel:drawText(
         "Unlocked " .. tostring(territory.unlockedPlotCount or 0)
-            .. " | Barricades "
+            .. " | Ring "
+            .. tostring(territory.currentFrontierRing or 1)
+            .. " Barricades "
             .. tostring(territory.activeBarricadeCount or 0)
             .. "/"
             .. tostring(territory.maxActiveBarricades or 0),

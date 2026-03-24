@@ -22,6 +22,13 @@ end
 
 local function buildBarricadeRecipe(ringDistance)
     local ring = math.max(1, math.floor(tonumber(ringDistance) or 1))
+    if ring <= 2 then
+        return {
+            { fullType = "Base.Log", count = 4 },
+            { fullType = "Base.RippedSheets", count = 4 }
+        }
+    end
+
     return {
         { fullType = "Base.Log", count = 2 + math.max(0, ring - 1) },
         { fullType = "Base.Nails", count = 8 + (math.max(0, ring - 1) * 4) },
@@ -39,7 +46,15 @@ function FrontierConfig.GetMaxActiveBarricades(hqLevel)
     if level <= 0 then
         return 0
     end
-    return 8 + ((level - 1) * 4)
+    return level * 8
+end
+
+function FrontierConfig.GetRingBarricadeCapacity(ringDistance)
+    local ring = math.max(0, math.floor(tonumber(ringDistance) or 0))
+    if ring <= 0 then
+        return 0
+    end
+    return ring * 8
 end
 
 function FrontierConfig.GetBarricadeDefinition()
@@ -63,7 +78,7 @@ function FrontierConfig.GetBarricadeLevelDefinition(targetLevel, plotX, plotY)
     local ring = normalizeRingDistance(plotX, plotY)
     return {
         enabled = true,
-        workPoints = 18 + (ring * 6),
+        workPoints = ring <= 2 and 10 or (18 + (ring * 6)),
         xpReward = 80 + (ring * 10),
         recipe = buildBarricadeRecipe(ring),
         effects = {
