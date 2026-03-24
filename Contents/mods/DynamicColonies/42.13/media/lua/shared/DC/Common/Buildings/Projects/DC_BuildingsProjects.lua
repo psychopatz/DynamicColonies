@@ -17,6 +17,82 @@ local function getSkills()
     return DC_Colony and DC_Colony.Skills or nil
 end
 
+local function createProjectRecord(owner, worker, buildingType, target, projectDefinition)
+    local labourConfig = getColonyConfig()
+    return {
+        projectID = "project_" .. tostring(Buildings.NextID("project")),
+        ownerUsername = owner,
+        buildingType = tostring(buildingType or ""),
+        buildingID = target.instance and target.instance.buildingID or nil,
+        installKey = target.installKey,
+        currentLevel = math.max(0, math.floor(tonumber(target.currentLevel) or 0)),
+        targetLevel = math.max(1, math.floor(tonumber(target.targetLevel) or 1)),
+        assignedBuilderID = worker and worker.workerID or nil,
+        progressWorkPoints = 0,
+        requiredWorkPoints = math.max(1, math.floor(tonumber(projectDefinition.workPoints) or 1)),
+        recipe = Internal.CopyDeep(projectDefinition.recipe or {}),
+        xpReward = math.max(0, math.floor(tonumber(projectDefinition.xpReward) or 0)),
+        status = "Active",
+        mode = tostring(target.mode or "build"),
+        materialTrackingVersion = 1,
+        materialCounts = {},
+        materialState = "Stalled",
+        materialProgressRatio = 0,
+        plotX = math.floor(tonumber(target.plotX) or 0),
+        plotY = math.floor(tonumber(target.plotY) or 0),
+        startedWorldHours = (labourConfig.GetCurrentWorldHours and labourConfig.GetCurrentWorldHours()) or (labourConfig.GetCurrentHour and labourConfig.GetCurrentHour()) or 0,
+        failureReason = nil
+    }
+end
+
+function Buildings.EnsureInitialHeadquartersProject(ownerUsername)
+    local labourConfig = getColonyConfig()
+    local owner = labourConfig.GetOwnerUsername and labourConfig.GetOwnerUsername(ownerUsername) or tostring(ownerUsername or "local")
+    if Buildings.OwnerHasHeadquarters and Buildings.OwnerHasHeadquarters(owner) then
+        return nil
+    end
+
+    local hasAnyCompletedBuilding = false
+    for _, instance in ipairs(Buildings.GetBuildingsForOwner(owner) or {}) do
+        if math.floor(tonumber(instance and instance.level) or 0) > 0 then
+            hasAnyCompletedBuilding = true
+            break
+        end
+    end
+    if hasAnyCompletedBuilding then
+        return nil
+    end
+
+    for _, project in pairs(Buildings.GetProjectsForOwner(owner) or {}) do
+        if tostring(project and project.status or "") == "Active" then
+            return nil
+        end
+    end
+
+    local plot, state = Buildings.GetPlotWithState(owner, 0, 0)
+    local expectedState = Buildings.MapConstants
+        and Buildings.MapConstants.PlotStates
+        and Buildings.MapConstants.PlotStates.Empty
+        or "Empty"
+    local expectedKind = Buildings.MapConstants
+        and Buildings.MapConstants.PlotKinds
+        and Buildings.MapConstants.PlotKinds.HQOnly
+        or "HQOnly"
+    if not plot or tostring(state or "") ~= tostring(expectedState) then
+        return nil
+    end
+    if plot.unlocked ~= true or tostring(plot.kind or "") ~= tostring(expectedKind) then
+        return nil
+    end
+
+    local ok, _, project = Buildings.QueueProject(owner, "Headquarters", "build", 0, 0, nil, nil)
+    if ok then
+        return project
+    end
+
+    return nil
+end
+
 function Buildings.StartProject(ownerUsername, workerID, buildingType, mode, plotX, plotY, buildingID, installKey)
     local labourConfig = getColonyConfig()
     local owner = labourConfig.GetOwnerUsername and labourConfig.GetOwnerUsername(ownerUsername) or tostring(ownerUsername or "local")
@@ -40,34 +116,61 @@ function Buildings.StartProject(ownerUsername, workerID, buildingType, mode, plo
     end
 
     local ownerProjects = Buildings.GetProjectsForOwner(owner)
-    local project = {
-        projectID = "project_" .. tostring(Buildings.NextID("project")),
-        ownerUsername = owner,
-        buildingType = tostring(buildingType or ""),
-        buildingID = target.instance and target.instance.buildingID or nil,
-        installKey = target.installKey,
-        currentLevel = math.max(0, math.floor(tonumber(target.currentLevel) or 0)),
-        targetLevel = math.max(1, math.floor(tonumber(target.targetLevel) or 1)),
-        assignedBuilderID = worker.workerID,
-        progressWorkPoints = 0,
-        requiredWorkPoints = math.max(1, math.floor(tonumber(projectDefinition.workPoints) or 1)),
-        recipe = Internal.CopyDeep(projectDefinition.recipe or {}),
-        xpReward = math.max(0, math.floor(tonumber(projectDefinition.xpReward) or 0)),
-        status = "Active",
-        mode = tostring(target.mode or "build"),
-        materialTrackingVersion = 1,
-        materialCounts = {},
-        materialState = "Stalled",
-        materialProgressRatio = 0,
-        plotX = math.floor(tonumber(target.plotX) or 0),
-        plotY = math.floor(tonumber(target.plotY) or 0),
-        startedWorldHours = (labourConfig.GetCurrentWorldHours and labourConfig.GetCurrentWorldHours()) or 0,
-        failureReason = nil
-    }
+    local project = createProjectRecord(owner, worker, buildingType, target, projectDefinition)
     ownerProjects[project.projectID] = project
     Buildings.RefreshProjectMaterialState(project)
     Buildings.Save()
     return true, nil, project
+end
+
+function Buildings.QueueProject(ownerUsername, buildingType, mode, plotX, plotY, buildingID, installKey)
+    local labourConfig = getColonyConfig()
+    local owner = labourConfig.GetOwnerUsername and labourConfig.GetOwnerUsername(ownerUsername) or tostring(ownerUsername or "local")
+    local target, targetReason = Buildings.ResolveProjectTarget(owner, buildingType, mode, plotX, plotY, buildingID, installKey)
+    if not target then
+        return false, targetReason, nil
+    end
+
+    local projectDefinition = target.mode == "install"
+        and Config.GetInstallDefinition(buildingType, target.installKey)
+        or Config.GetLevelDefinition(buildingType, target.targetLevel)
+    if not projectDefinition or projectDefinition.enabled == false then
+        return false, "That level is not available yet.", nil
+    end
+
+    local ownerProjects = Buildings.GetProjectsForOwner(owner)
+    local project = createProjectRecord(owner, nil, buildingType, target, projectDefinition)
+    ownerProjects[project.projectID] = project
+    Buildings.RefreshProjectMaterialState(project)
+    Buildings.Save()
+    return true, nil, project
+end
+
+function Buildings.ReassignProjectBuilder(ownerUsername, projectID, workerID)
+    local labourConfig = getColonyConfig()
+    local owner = labourConfig.GetOwnerUsername and labourConfig.GetOwnerUsername(ownerUsername) or tostring(ownerUsername or "local")
+    local project = Buildings.GetProjectByID and Buildings.GetProjectByID(owner, projectID) or nil
+    if not project or tostring(project.status or "") ~= "Active" then
+        return false, "That project is no longer active.", nil, nil, nil
+    end
+
+    local registry = getRegistry()
+    local currentWorker = registry and registry.GetWorkerForOwner and registry.GetWorkerForOwner(owner, project.assignedBuilderID) or nil
+    local nextWorker = registry and registry.GetWorkerForOwner and registry.GetWorkerForOwner(owner, workerID) or nil
+    local canBuild, workerReason = Buildings.CanWorkerBuild(nextWorker, {
+        allowedProjectID = project.projectID
+    })
+    if not canBuild then
+        return false, workerReason, project, currentWorker, nextWorker
+    end
+
+    if tostring(project.assignedBuilderID or "") == tostring(nextWorker.workerID or "") then
+        return true, nil, project, currentWorker, nextWorker
+    end
+
+    project.assignedBuilderID = nextWorker.workerID
+    Buildings.Save()
+    return true, nil, project, currentWorker, nextWorker
 end
 
 function Buildings.CompleteProject(project)

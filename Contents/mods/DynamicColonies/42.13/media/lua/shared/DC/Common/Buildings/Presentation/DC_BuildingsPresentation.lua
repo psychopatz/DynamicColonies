@@ -110,7 +110,7 @@ function Buildings.BuildOwnerSnapshot(ownerUsername)
         local worker = registry and registry.GetWorkerForOwnerRaw and registry.GetWorkerForOwnerRaw(owner, project.assignedBuilderID)
             or registry and registry.GetWorkerForOwner and registry.GetWorkerForOwner(owner, project.assignedBuilderID)
             or nil
-        workerName = worker and worker.name or tostring(project.assignedBuilderID or "Unknown")
+        workerName = worker and worker.name or (project.assignedBuilderID and tostring(project.assignedBuilderID) or "Unassigned")
         local projectDisplayName = nil
         if tostring(project.mode or "") == "install" and Config.GetInstallDefinition then
             local installDefinition = Config.GetInstallDefinition(project.buildingType, project.installKey)

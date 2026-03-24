@@ -11,7 +11,8 @@ function DC_BuildingsPlotButton:applyPlot(plot, selected)
     local border = selected == true and DC_BuildingsUIUtils.Colors.selectedBorder or DC_BuildingsUIUtils.Colors.defaultBorder
     self.borderColor = { r = border.r, g = border.g, b = border.b, a = border.a }
     self:setEnable(plot and plot.state ~= "Locked")
-    self:setTitle(DC_BuildingsUIUtils.GetPlotTitle(plot))
+    self.displayTitle = DC_BuildingsUIUtils.GetPlotTitle(plot)
+    self:setTitle("")
 end
 
 function DC_BuildingsPlotButton:render()
@@ -20,10 +21,15 @@ function DC_BuildingsPlotButton:render()
         return
     end
 
+    local title = tostring(self.displayTitle or "")
+    if title ~= "" then
+        self:drawTextCentre(title, self.width / 2, 4, 0, 0, 0, 1, UIFont.Small)
+    end
+
     local imageX = 10
-    local imageY = 10
+    local imageY = 20
     local imageW = self.width - 20
-    local imageH = self.height - 28
+    local imageH = self.height - 42
     local texturePath = DC_BuildingsUIUtils.GetPlotTexturePath(self.plot)
     local texture = DC_BuildingsUIUtils.GetTexture(texturePath)
     if texture then
@@ -35,20 +41,20 @@ function DC_BuildingsPlotButton:render()
         self:drawRect(imageX, imageY + imageH - 12, imageW, 12, 0.58, 0.95, 0.72, 0.12)
     elseif self.plot.project then
         local ratio = math.max(0, math.min(1, tonumber(self.plot.project.progressRatio) or 0))
-        local remainingWidth = math.floor(imageW * (1 - ratio))
-        if remainingWidth > 0 then
-            self:drawRect(imageX, imageY, remainingWidth, imageH, 0.5, 0.18, 0.72, 0.22)
-            self:drawRect(imageX, imageY + imageH - 12, remainingWidth, 12, 0.62, 0.12, 0.48, 0.16)
-            local edgeX = imageX + remainingWidth - 2
-            if edgeX >= imageX then
-                self:drawRect(edgeX, imageY, 2, imageH, 0.82, 0.45, 1, 0.48)
+        local fillHeight = math.floor(imageH * ratio)
+        if fillHeight > 0 then
+            local fillY = imageY + imageH - fillHeight
+            self:drawRect(imageX, fillY, imageW, fillHeight, 0.5, 0.18, 0.72, 0.22)
+            local edgeY = fillY - 2
+            if edgeY >= imageY then
+                self:drawRect(imageX, edgeY, imageW, 2, 0.82, 0.45, 1, 0.48)
             end
         end
     end
 
-    if self.plot.kind == "HQOnly" and not self.plot.building and not self.plot.project then
+    if not texture and self.plot.kind == "HQOnly" and not self.plot.building and not self.plot.project then
         self:drawTextCentre("HQ Lot", self.width / 2, self.height / 2 - 8, 1, 0.92, 0.55, 1, UIFont.Small)
-    elseif self.plot.state == "Locked" then
+    elseif not texture and self.plot.state == "Locked" then
         self:drawTextCentre("Locked", self.width / 2, self.height / 2 - 8, 0.45, 0.45, 0.45, 1, UIFont.Small)
     end
 

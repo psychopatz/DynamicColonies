@@ -45,7 +45,7 @@ local function summarizeProject(project)
         currentLevel = project.currentLevel,
         targetLevel = project.targetLevel,
         assignedBuilderID = project.assignedBuilderID,
-        assignedBuilderName = worker and worker.name or tostring(project.assignedBuilderID or "Unknown"),
+        assignedBuilderName = worker and worker.name or (project.assignedBuilderID and tostring(project.assignedBuilderID) or "Unassigned"),
         progressWorkPoints = progress,
         requiredWorkPoints = required,
         progressRatio = math.max(0, math.min(1, progress / required)),

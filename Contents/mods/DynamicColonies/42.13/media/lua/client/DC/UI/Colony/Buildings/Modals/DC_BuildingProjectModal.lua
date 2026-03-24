@@ -8,6 +8,32 @@ require "DC/UI/Colony/Buildings/Utils/DC_BuildingsUIUtils"
 DC_BuildingProjectModal = ISCollapsableWindow:derive("DC_BuildingProjectModal")
 DC_BuildingProjectModal.instance = DC_BuildingProjectModal.instance or nil
 
+local function canUseDebug()
+    if DynamicTrading and DynamicTrading.Debug then
+        return true
+    end
+
+    if isDebugEnabled and isDebugEnabled() then
+        return true
+    end
+
+    local player = nil
+    if getSpecificPlayer then
+        player = getSpecificPlayer(0)
+    elseif getPlayer then
+        player = getPlayer()
+    end
+
+    if player and player.getAccessLevel then
+        local accessLevel = player:getAccessLevel()
+        if accessLevel and accessLevel ~= "" and accessLevel ~= "None" then
+            return true
+        end
+    end
+
+    return false
+end
+
 function DC_BuildingProjectModal:initialise()
     ISCollapsableWindow.initialise(self)
     self:setResizable(false)
@@ -17,9 +43,22 @@ function DC_BuildingProjectModal:refreshBuilderOptions()
     self.builderOptions = DC_BuildingsClientSelectors.GetBuilderOptions()
     self.builderCombo:clear()
     for _, worker in ipairs(self.builderOptions or {}) do
-        self.builderCombo:addOption(DC_BuildingsClientSelectors.BuildBuilderLabel(worker), worker)
+        self.builderCombo:addOption(DC_BuildingsClientSelectors.BuildBuilderLabel(worker, {
+            allowedProjectID = self.preview and self.preview.projectID or nil
+        }), worker)
     end
-    self.builderCombo.selected = #(self.builderOptions or {}) > 0 and 1 or 0
+    local selectedIndex = #(self.builderOptions or {}) > 0 and 1 or 0
+    local previewProjectID = tostring(self.preview and self.preview.projectID or "")
+    local assignedBuilderID = tostring(self.preview and self.preview.assignedBuilderID or "")
+    if previewProjectID ~= "" and assignedBuilderID ~= "" then
+        for index, worker in ipairs(self.builderOptions or {}) do
+            if tostring(worker and worker.workerID or "") == assignedBuilderID then
+                selectedIndex = index
+                break
+            end
+        end
+    end
+    self.builderCombo.selected = selectedIndex
 end
 
 function DC_BuildingProjectModal:getSelectedBuilder()
@@ -33,7 +72,9 @@ end
 function DC_BuildingProjectModal:updateText()
     local preview = self.preview or {}
     local builder = self:getSelectedBuilder()
-    local builderState = DC_BuildingsClientSelectors.GetBuilderRequirementState(builder)
+    local builderState = DC_BuildingsClientSelectors.GetBuilderRequirementState(builder, {
+        allowedProjectID = preview.projectID
+    })
     local text = ""
     text = text .. " <RGB:1,1,1> <SIZE:Medium> " .. tostring(preview.displayName or preview.buildingType or "Project") .. " <LINE> "
     text = text .. " <RGB:0.72,0.72,0.72> Mode: <RGB:1,1,1> " .. tostring(preview.mode or "build") .. " <LINE> "
@@ -50,15 +91,24 @@ function DC_BuildingProjectModal:updateText()
     else
         text = text .. " <RGB:0.72,0.72,0.72> Target Level: <RGB:1,1,1> " .. tostring(preview.targetLevel or 0) .. " <LINE> "
     end
-    text = text .. " <RGB:0.72,0.72,0.72> Work Points: <RGB:1,1,1> " .. tostring(preview.workPoints or 0) .. " <LINE> "
+    text = text .. " <RGB:0.72,0.72,0.72> Work Points: <RGB:1,1,1> " .. tostring(preview.workPoints or preview.requiredWorkPoints or 0) .. " <LINE> "
     text = text .. " <LINE> <RGB:1,1,1> <SIZE:Medium> Materials <LINE> "
-    for _, line in ipairs(DC_BuildingsUIUtils.BuildRecipeLines(preview.recipeAvailability and preview.recipeAvailability.entries or {})) do
+    for _, line in ipairs(DC_BuildingsUIUtils.BuildRecipeLines(
+        preview.recipeAvailability and preview.recipeAvailability.entries or preview.materialEntries or {}
+    )) do
         text = text .. " " .. line .. " <LINE> "
     end
     if preview.canStart == true then
         text = text .. " <RGB:0.72,0.9,0.72> Materials ready. Construction can begin immediately. <LINE> "
     else
         text = text .. " <RGB:0.92,0.84,0.45> Missing materials will stall the project until supplies are added. <LINE> "
+    end
+    if preview.projectID then
+        text = text .. " <LINE> <RGB:1,1,1> <SIZE:Medium> Current Builder <LINE> "
+        text = text .. " <RGB:0.72,0.72,0.72> Assigned: <RGB:1,1,1> "
+            .. tostring(preview.assignedBuilderName or preview.assignedBuilderID or "Unassigned")
+            .. " <LINE> "
+        text = text .. " <RGB:0.82,0.82,0.82> Select another Builder below to swap them onto this project without resetting progress. <LINE> "
     end
     text = text .. " <LINE> <RGB:1,1,1> <SIZE:Medium> Builder <LINE> "
     if builder then
@@ -76,13 +126,19 @@ function DC_BuildingProjectModal:updateText()
 
     self.textPanel:setText(text)
     self.textPanel:paginate()
-    self.btnConfirm:setTitle(preview.canStart == true and "Start" or "Queue")
+    if self.confirmLabelOverride and self.confirmLabelOverride ~= "" then
+        self.btnConfirm:setTitle(self.confirmLabelOverride)
+    else
+        self.btnConfirm:setTitle(preview.canStart == true and "Start" or "Queue")
+    end
     self.btnConfirm:setEnable(preview.available == true and builderState.ready == true)
 end
 
 function DC_BuildingProjectModal:createChildren()
     ISCollapsableWindow.createChildren(self)
     local th = self:titleBarHeight()
+    local actionButtonCount = self.debugEnabled == true and 3 or 2
+    local actionAreaWidth = (actionButtonCount * 90) + ((actionButtonCount - 1) * 10)
 
     self.textPanel = ISRichTextPanel:new(10, th + 10, self.width - 20, self.height - th - 78)
     self.textPanel:initialise()
@@ -93,15 +149,23 @@ function DC_BuildingProjectModal:createChildren()
     self.textPanel:addScrollBars()
     self:addChild(self.textPanel)
 
-    self.builderCombo = ISComboBox:new(10, self.height - 58, self.width - 220, 24, self, self.onBuilderChanged)
+    self.builderCombo = ISComboBox:new(10, self.height - 58, self.width - actionAreaWidth - 20, 24, self, self.onBuilderChanged)
     self.builderCombo:initialise()
     self:addChild(self.builderCombo)
 
-    self.btnConfirm = ISButton:new(self.width - 200, self.height - 58, 90, 24, "Confirm", self, self.onConfirmClicked)
+    local buttonX = self.width - actionAreaWidth - 10
+    if self.debugEnabled == true then
+        self.btnDebugMaterials = ISButton:new(buttonX, self.height - 58, 90, 24, "Debug Mats", self, self.onDebugMaterialsClicked)
+        self.btnDebugMaterials:initialise()
+        self:addChild(self.btnDebugMaterials)
+        buttonX = buttonX + 100
+    end
+
+    self.btnConfirm = ISButton:new(buttonX, self.height - 58, 90, 24, "Confirm", self, self.onConfirmClicked)
     self.btnConfirm:initialise()
     self:addChild(self.btnConfirm)
 
-    self.btnCancel = ISButton:new(self.width - 100, self.height - 58, 90, 24, "Cancel", self, self.onCancelClicked)
+    self.btnCancel = ISButton:new(buttonX + 100, self.height - 58, 90, 24, "Cancel", self, self.onCancelClicked)
     self.btnCancel:initialise()
     self:addChild(self.btnCancel)
 
@@ -121,6 +185,7 @@ function DC_BuildingProjectModal:onConfirmClicked()
 
     self.onConfirmCallback({
         workerID = builder.workerID,
+        projectID = self.preview.projectID,
         buildingType = self.preview.buildingType,
         mode = self.preview.mode,
         plotX = self.preview.plotX,
@@ -129,6 +194,22 @@ function DC_BuildingProjectModal:onConfirmClicked()
         installKey = self.preview.installKey
     })
     self:close()
+end
+
+function DC_BuildingProjectModal:onDebugMaterialsClicked()
+    if not self.onDebugMaterialsCallback then
+        return
+    end
+
+    self.onDebugMaterialsCallback({
+        projectID = self.preview.projectID,
+        buildingType = self.preview.buildingType,
+        mode = self.preview.mode,
+        plotX = self.preview.plotX,
+        plotY = self.preview.plotY,
+        buildingID = self.preview.buildingID,
+        installKey = self.preview.installKey
+    })
 end
 
 function DC_BuildingProjectModal:onCancelClicked()
@@ -164,6 +245,9 @@ function DC_BuildingProjectModal.Open(args)
     modal.title = tostring(args.title or "Project")
     modal.preview = args.preview or {}
     modal.onConfirmCallback = args.onConfirm
+    modal.onDebugMaterialsCallback = args.onDebugMaterials
+    modal.confirmLabelOverride = args.confirmLabel
+    modal.debugEnabled = canUseDebug()
     modal.builderOptions = {}
     modal:initialise()
     modal:instantiate()

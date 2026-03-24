@@ -49,6 +49,9 @@ function DC_BuildingsUIUtils.GetPlotTexturePath(plot)
     if plot.project and plot.project.iconPath then
         return plot.project.iconPath
     end
+    if plot.kind == "HQOnly" then
+        return "media/ui/Buildings/DC_Headquarters.png"
+    end
     return nil
 end
 

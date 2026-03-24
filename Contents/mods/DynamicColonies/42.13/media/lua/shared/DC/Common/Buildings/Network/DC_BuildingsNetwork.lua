@@ -13,6 +13,25 @@ local Internal = Network.Internal
 
 Network.Handlers = Network.Handlers or {}
 
+local function canUseDebug(player)
+    if DynamicTrading and DynamicTrading.Debug then
+        return true
+    end
+
+    if isDebugEnabled and isDebugEnabled() then
+        return true
+    end
+
+    if player and player.getAccessLevel then
+        local accessLevel = player:getAccessLevel()
+        if accessLevel and accessLevel ~= "" and accessLevel ~= "None" then
+            return true
+        end
+    end
+
+    return false
+end
+
 local function sendResponse(player, module, command, args)
     if Internal.sendResponse then
         Internal.sendResponse(player, module, command, args)
@@ -33,6 +52,9 @@ end
 
 local function syncBuildingsSnapshot(player, ownerUsername)
     local owner = ColonyConfig.GetOwnerUsername(ownerUsername or player)
+    if Buildings.EnsureInitialHeadquartersProject then
+        Buildings.EnsureInitialHeadquartersProject(owner)
+    end
     sendResponse(player, ColonyConfig.COMMAND_MODULE, "SyncBuildingsSnapshot", {
         snapshot = Buildings.BuildOwnerSnapshot(owner)
     })
@@ -162,6 +184,57 @@ Network.Handlers.StartBuildingProject = function(player, args)
     syncBuildingsSnapshot(player, owner)
 end
 
+Network.Handlers.ReassignBuildingProject = function(player, args)
+    if not args or not args.projectID or not args.workerID then
+        return
+    end
+
+    local owner = ColonyConfig.GetOwnerUsername(player)
+    local ok, reason, project, currentWorker, nextWorker = Buildings.ReassignProjectBuilder(
+        owner,
+        args.projectID,
+        args.workerID
+    )
+
+    if not ok then
+        if Internal.syncNotice then
+            Internal.syncNotice(player, reason or "Unable to swap builders for that project.", "error", true)
+        end
+        syncBuildingsSnapshot(player, owner)
+        return
+    end
+
+    if currentWorker and tostring(currentWorker.workerID or "") ~= tostring(nextWorker and nextWorker.workerID or "") then
+        Internal.syncWorkerDetail(player, currentWorker.workerID, false)
+    end
+    if nextWorker then
+        Internal.syncWorkerDetail(player, nextWorker.workerID, false)
+    end
+    syncWorkerList(player)
+
+    if Internal.syncOwnedFactionStatus then
+        Internal.syncOwnedFactionStatus(player)
+    end
+    if Internal.syncNotice then
+        if currentWorker and tostring(currentWorker.workerID or "") == tostring(nextWorker and nextWorker.workerID or "") then
+            Internal.syncNotice(
+                player,
+                tostring(nextWorker and (nextWorker.name or nextWorker.workerID) or "That builder") .. " is already assigned to this project.",
+                "info",
+                false
+            )
+        else
+            Internal.syncNotice(
+                player,
+                "Swapped project builder to " .. tostring(nextWorker and (nextWorker.name or nextWorker.workerID) or "the selected worker") .. ".",
+                "info",
+                false
+            )
+        end
+    end
+    syncBuildingsSnapshot(player, owner)
+end
+
 Network.Handlers.SupplyBuildingProjectFromInventory = function(player, args)
     if not args or not args.projectID then
         return
@@ -249,6 +322,74 @@ Network.Handlers.SupplyBuildingProjectFromInventory = function(player, args)
     end
 
     syncBuildingsSnapshot(player, owner)
+end
+
+Network.Handlers.DebugGiveProjectMaterials = function(player, args)
+    if not player or not canUseDebug(player) then
+        return
+    end
+
+    args = args or {}
+    if not args.buildingType then
+        return
+    end
+
+    local owner = ColonyConfig.GetOwnerUsername(player)
+    local inventory = player:getInventory()
+    if not inventory then
+        if Internal.syncNotice then
+            Internal.syncNotice(player, "No player inventory found.", "error", true)
+        end
+        return
+    end
+
+    local addedCount = 0
+    local recipeEntries = nil
+    if args.projectID and Buildings.GetProjectByID then
+        local project = Buildings.GetProjectByID(owner, args.projectID)
+        if project and tostring(project.status or "") == "Active" then
+            recipeEntries = project.recipe or {}
+        end
+    end
+    if not recipeEntries then
+        local preview = Buildings.BuildProjectPreview(
+            owner,
+            args.buildingType,
+            args.mode,
+            args.plotX,
+            args.plotY,
+            args.buildingID,
+            args.installKey
+        )
+        recipeEntries = preview and preview.recipeAvailability and preview.recipeAvailability.entries or {}
+    end
+
+    local addInventoryItem = Internal.addInventoryItem
+    for _, entry in ipairs(recipeEntries or {}) do
+        local fullType = tostring(entry and entry.fullType or "")
+        local count = math.max(0, math.floor(tonumber(entry and entry.count) or 0))
+        if fullType ~= "" and count > 0 then
+            if addInventoryItem then
+                addInventoryItem(inventory, fullType, count)
+            else
+                inventory:AddItems(fullType, count)
+            end
+            addedCount = addedCount + count
+        end
+    end
+
+    if Internal.syncNotice then
+        if addedCount > 0 then
+            Internal.syncNotice(
+                player,
+                "Debug added " .. tostring(addedCount) .. " building material item" .. (addedCount == 1 and "" or "s") .. ".",
+                "info",
+                false
+            )
+        else
+            Internal.syncNotice(player, "No materials were defined for that project preview.", "error", true)
+        end
+    end
 end
 
 Network.Handlers.DestroyBuilding = function(player, args)

@@ -763,7 +763,9 @@ function Buildings.BuildBuildingInstallOptions(ownerUsername, plotX, plotY, buil
     return options
 end
 
-function Buildings.CanWorkerBuild(worker)
+function Buildings.CanWorkerBuild(worker, options)
+    options = type(options) == "table" and options or {}
+    local allowedProjectID = tostring(options.allowedProjectID or "")
     local labourConfig = getColonyConfig()
     if not worker or not worker.workerID then
         return false, "Builder not found."
@@ -777,7 +779,8 @@ function Buildings.CanWorkerBuild(worker)
     if getWorkerConstructionLevel(worker) <= 0 then
         return false, "That worker has no Construction skill."
     end
-    if Buildings.GetWorkerProject(worker.ownerUsername, worker.workerID) then
+    local currentProject = Buildings.GetWorkerProject(worker.ownerUsername, worker.workerID)
+    if currentProject and tostring(currentProject.projectID or "") ~= allowedProjectID then
         return false, "That builder already has an active project."
     end
     local registry = getRegistry()

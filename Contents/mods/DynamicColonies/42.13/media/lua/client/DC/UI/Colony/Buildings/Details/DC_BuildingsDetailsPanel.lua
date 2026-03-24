@@ -36,7 +36,12 @@ function DC_BuildingsDetailsPanel:createChildren()
     self.btnSupply:setAnchorBottom(true)
     self:addChild(self.btnSupply)
 
-    self.btnDestroy = ISButton:new(266, self.height - 34, 78, 24, "Destroy", self, self.onDestroyClicked)
+    self.btnSwap = ISButton:new(266, self.height - 34, 62, 24, "Swap", self, self.onSwapClicked)
+    self.btnSwap:initialise()
+    self.btnSwap:setAnchorBottom(true)
+    self:addChild(self.btnSwap)
+
+    self.btnDestroy = ISButton:new(334, self.height - 34, 62, 24, "Destroy", self, self.onDestroyClicked)
     self.btnDestroy:initialise()
     self.btnDestroy:setAnchorBottom(true)
     self:addChild(self.btnDestroy)
@@ -59,6 +64,10 @@ function DC_BuildingsDetailsPanel:setPlot(plot)
     if self.btnSupply then
         local canSupply = plot and plot.project and tostring(plot.project.materialState or "") == "Stalled"
         self.btnSupply:setEnable(canSupply == true)
+    end
+    if self.btnSwap then
+        local canSwap = plot and plot.project and tostring(plot.project.status or "") == "Active"
+        self.btnSwap:setEnable(canSwap == true)
     end
     if self.btnDestroy then
         local canDestroy = plot and plot.building and plot.building.canDestroy == true
@@ -84,13 +93,19 @@ function DC_BuildingsDetailsPanel:onSupplyClicked()
     end
 end
 
+function DC_BuildingsDetailsPanel:onSwapClicked()
+    if self.onSwapCallback and self.plot and self.plot.project then
+        self.onSwapCallback(self.plot)
+    end
+end
+
 function DC_BuildingsDetailsPanel:onDestroyClicked()
     if self.onDestroyCallback and self.plot and self.plot.building then
         self.onDestroyCallback(self.plot)
     end
 end
 
-function DC_BuildingsDetailsPanel:new(x, y, width, height, onUpgradeCallback, onInstallCallback, onSupplyCallback, onDestroyCallback)
+function DC_BuildingsDetailsPanel:new(x, y, width, height, onUpgradeCallback, onInstallCallback, onSupplyCallback, onSwapCallback, onDestroyCallback)
     local o = ISPanel:new(x, y, width, height)
     setmetatable(o, self)
     self.__index = self
@@ -99,6 +114,7 @@ function DC_BuildingsDetailsPanel:new(x, y, width, height, onUpgradeCallback, on
     o.onUpgradeCallback = onUpgradeCallback
     o.onInstallCallback = onInstallCallback
     o.onSupplyCallback = onSupplyCallback
+    o.onSwapCallback = onSwapCallback
     o.onDestroyCallback = onDestroyCallback
     return o
 end

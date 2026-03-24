@@ -17,12 +17,13 @@ function DC_BuildingsDetailsFormatter.BuildPlotText(plot)
         text = text .. " <RGB:0.72,0.72,0.72> Project: <RGB:1,1,1> " .. tostring(plot.project.displayName or plot.project.buildingType or "Project") .. " <LINE> "
         text = text .. " <RGB:0.72,0.72,0.72> Mode: <RGB:1,1,1> " .. tostring(plot.project.mode or "build") .. " <LINE> "
         text = text .. " <RGB:0.72,0.72,0.72> Material State: <RGB:1,1,1> " .. tostring(plot.project.materialState or "Ready") .. " <LINE> "
-        text = text .. " <RGB:0.72,0.72,0.72> Builder: <RGB:1,1,1> " .. tostring(plot.project.assignedBuilderName or "Unknown") .. " <LINE> "
+        text = text .. " <RGB:0.72,0.72,0.72> Builder: <RGB:1,1,1> " .. tostring(plot.project.assignedBuilderName or "Unassigned") .. " <LINE> "
         text = text .. " <RGB:0.72,0.72,0.72> Progress: <RGB:1,1,1> "
             .. tostring(math.floor((tonumber(plot.project.progressWorkPoints) or 0) + 0.5))
             .. " / "
             .. tostring(plot.project.requiredWorkPoints or 0)
             .. " WP <LINE> "
+        text = text .. " <RGB:0.82,0.82,0.82> Use Swap to move this project onto another Builder without losing progress. <LINE> "
         text = text .. " <LINE> <RGB:1,1,1> <SIZE:Medium> Project Materials <LINE> "
         for _, line in ipairs(DC_BuildingsUIUtils.BuildRecipeLines(plot.project.materialEntries or {})) do
             text = text .. " " .. line .. " <LINE> "

@@ -45,17 +45,35 @@ function DC_BuildingsClientSelectors.GetBuilderOptions()
     end
 
     table.sort(options, function(a, b)
+        local aReady = tostring(a and a.toolState or "") == "Ready" and 1 or 0
+        local bReady = tostring(b and b.toolState or "") == "Ready" and 1 or 0
+        if aReady ~= bReady then
+            return aReady > bReady
+        end
+
+        local aLevel = DC_BuildingsClientSelectors.GetBuilderConstructionLevel(a)
+        local bLevel = DC_BuildingsClientSelectors.GetBuilderConstructionLevel(b)
+        if aLevel ~= bLevel then
+            return aLevel > bLevel
+        end
+
         return tostring(a.name or a.workerID or "") < tostring(b.name or b.workerID or "")
     end)
     return options
 end
 
-function DC_BuildingsClientSelectors.BuildBuilderLabel(worker)
+function DC_BuildingsClientSelectors.BuildBuilderLabel(worker, options)
+    options = type(options) == "table" and options or {}
+    local allowedProjectID = tostring(options.allowedProjectID or "")
     local label = tostring(worker.name or worker.workerID or "Builder")
     label = label .. " | Const Lv " .. tostring(DC_BuildingsClientSelectors.GetBuilderConstructionLevel(worker))
     label = label .. " | Tool: " .. tostring(worker.toolState or "Missing")
     if worker.assignedProjectID then
-        label = label .. " | Busy"
+        if tostring(worker.assignedProjectID or "") == allowedProjectID and allowedProjectID ~= "" then
+            label = label .. " | Assigned"
+        else
+            label = label .. " | Busy"
+        end
     end
     if worker.housingState then
         label = label .. " | " .. tostring(worker.housingState)
@@ -63,14 +81,16 @@ function DC_BuildingsClientSelectors.BuildBuilderLabel(worker)
     return label
 end
 
-function DC_BuildingsClientSelectors.GetBuilderRequirementState(builder)
+function DC_BuildingsClientSelectors.GetBuilderRequirementState(builder, options)
+    options = type(options) == "table" and options or {}
+    local allowedProjectID = tostring(options.allowedProjectID or "")
     if not builder then
         return {
             ready = false,
             reason = "Assign a Builder first."
         }
     end
-    if builder.assignedProjectID then
+    if builder.assignedProjectID and tostring(builder.assignedProjectID or "") ~= allowedProjectID then
         return {
             ready = false,
             reason = tostring(builder.name or builder.workerID or "That builder")

@@ -34,6 +34,9 @@ function DC_BuildingsWindow:requestSnapshot()
         return
     end
 
+    if DC_Buildings and DC_Buildings.EnsureInitialHeadquartersProject then
+        DC_Buildings.EnsureInitialHeadquartersProject((DC_Colony and DC_Colony.Config and DC_Colony.Config.GetPlayerObject and DC_Colony.Config.GetPlayerObject()) or "local")
+    end
     DC_BuildingsWindow.cachedSnapshot = DC_Buildings and DC_Buildings.BuildOwnerSnapshot
         and DC_Buildings.BuildOwnerSnapshot((DC_Colony and DC_Colony.Config and DC_Colony.Config.GetPlayerObject and DC_Colony.Config.GetPlayerObject()) or "local")
         or nil
@@ -82,6 +85,66 @@ function DC_BuildingsWindow:openProjectModal(preview, title)
             local ownerWindow = self:getOwnerWindow()
             if ownerWindow and ownerWindow.sendColonyCommand then
                 ownerWindow:sendColonyCommand("StartBuildingProject", payload)
+            end
+        end,
+        onDebugMaterials = function(payload)
+            local ownerWindow = self:getOwnerWindow()
+            if ownerWindow and ownerWindow.sendColonyCommand then
+                ownerWindow:sendColonyCommand("DebugGiveProjectMaterials", payload)
+            end
+        end
+    })
+end
+
+function DC_BuildingsWindow:openReassignProjectModal(plot)
+    local project = plot and plot.project or nil
+    if not project then
+        return
+    end
+
+    DC_BuildingProjectModal.Open({
+        title = "Swap Project Builder",
+        confirmLabel = "Swap",
+        preview = {
+            projectID = project.projectID,
+            buildingType = project.buildingType,
+            displayName = project.displayName,
+            mode = project.mode,
+            plotX = project.plotX,
+            plotY = project.plotY,
+            buildingID = project.buildingID,
+            installKey = project.installKey,
+            targetLevel = project.targetLevel,
+            requiredWorkPoints = project.requiredWorkPoints,
+            workPoints = project.requiredWorkPoints,
+            materialEntries = project.materialEntries,
+            materialState = project.materialState,
+            canStart = tostring(project.materialState or "") ~= "Stalled",
+            available = true,
+            assignedBuilderID = project.assignedBuilderID,
+            assignedBuilderName = project.assignedBuilderName
+        },
+        onConfirm = function(payload)
+            local ownerWindow = self:getOwnerWindow()
+            if ownerWindow and ownerWindow.sendColonyCommand then
+                ownerWindow:sendColonyCommand("ReassignBuildingProject", {
+                    projectID = payload.projectID,
+                    workerID = payload.workerID
+                })
+            end
+        end,
+        onDebugMaterials = function(payload)
+            local ownerWindow = self:getOwnerWindow()
+            if ownerWindow and ownerWindow.sendColonyCommand then
+                ownerWindow:sendColonyCommand("DebugGiveProjectMaterials", {
+                    projectID = payload.projectID,
+                    buildingType = payload.buildingType,
+                    mode = payload.mode,
+                    plotX = payload.plotX,
+                    plotY = payload.plotY,
+                    buildingID = payload.buildingID,
+                    installKey = payload.installKey
+                })
             end
         end
     })
@@ -153,6 +216,14 @@ function DC_BuildingsWindow:onSupplyProject(plot)
     end
 end
 
+function DC_BuildingsWindow:onSwapProjectBuilder(plot)
+    if not plot or not plot.project then
+        return
+    end
+
+    self:openReassignProjectModal(plot)
+end
+
 function DC_BuildingsWindow:onDestroyPlot(plot)
     if not plot or not plot.building then
         return
@@ -209,6 +280,9 @@ function DC_BuildingsWindow:createChildren()
         end,
         function(plot)
             self:onSupplyProject(plot)
+        end,
+        function(plot)
+            self:onSwapProjectBuilder(plot)
         end,
         function(plot)
             self:onDestroyPlot(plot)
