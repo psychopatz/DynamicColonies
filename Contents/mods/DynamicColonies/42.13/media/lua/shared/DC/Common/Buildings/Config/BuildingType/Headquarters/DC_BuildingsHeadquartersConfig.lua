@@ -2,6 +2,17 @@ DC_Buildings = DC_Buildings or {}
 DC_Buildings.Config = DC_Buildings.Config or {}
 
 local Config = DC_Buildings.Config
+Config.Definitions = Config.Definitions or {}
+
+Config.Definitions.Headquarters = {
+    buildingType = "Headquarters",
+    displayName = "Headquarters",
+    iconPath = "media/ui/Buildings/DC_Headquarters.png",
+    enabled = true,
+    maxLevel = 0,
+    isInfinite = true,
+    levels = {}
+}
 
 local HQConfig = {
     buildingType = "Headquarters",
@@ -51,5 +62,3 @@ function HQConfig.GetLevelDefinition(targetLevel)
 end
 
 Config.HQ = HQConfig
-
-return HQConfig

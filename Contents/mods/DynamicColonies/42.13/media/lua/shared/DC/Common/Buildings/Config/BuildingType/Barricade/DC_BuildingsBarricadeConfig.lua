@@ -2,6 +2,17 @@ DC_Buildings = DC_Buildings or {}
 DC_Buildings.Config = DC_Buildings.Config or {}
 
 local Config = DC_Buildings.Config
+Config.Definitions = Config.Definitions or {}
+
+Config.Definitions.Barricade = {
+    buildingType = "Barricade",
+    displayName = "Barricade",
+    iconPath = "media/ui/Buildings/DC_Barricade.png",
+    enabled = true,
+    maxLevel = 1,
+    isInfinite = false,
+    levels = {}
+}
 
 Config.Frontier = Config.Frontier or {}
 
@@ -88,5 +99,3 @@ function FrontierConfig.GetBarricadeLevelDefinition(targetLevel, plotX, plotY)
         }
     }
 end
-
-return FrontierConfig
