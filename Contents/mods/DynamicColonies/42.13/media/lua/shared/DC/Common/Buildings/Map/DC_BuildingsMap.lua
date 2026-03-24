@@ -41,9 +41,9 @@ function Buildings.GetPlotWithState(ownerUsername, plotX, plotY)
         if building and math.floor(tonumber(building.level) or 0) > 0 then
             state = Constants.PlotStates.Built
         end
-        if project then
-            state = Constants.PlotStates.Reserved
-        end
+    end
+    if project then
+        state = Constants.PlotStates.Reserved
     end
 
     return plot, state, building, project

@@ -177,7 +177,7 @@ end
 
 function DC_BuildingsWindow:onPlotSelected(plot)
     self:selectPlot(plot)
-    if plot and plot.state == "Empty" and plot.availableActions and plot.availableActions.canBuild == true then
+    if plot and plot.availableActions and plot.availableActions.canBuild == true then
         DC_BuildingActionModal.Open({
             plot = plot,
             onBuild = function(selectedPlot)

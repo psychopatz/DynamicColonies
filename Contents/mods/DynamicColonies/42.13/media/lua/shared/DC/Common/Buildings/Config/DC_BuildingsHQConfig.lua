@@ -35,14 +35,17 @@ end
 
 function HQConfig.GetLevelDefinition(targetLevel)
     local level = math.max(1, math.floor(tonumber(targetLevel) or 1))
+    local frontierConfig = Config and Config.Frontier or nil
+    local currentCap = frontierConfig and frontierConfig.GetMaxActiveBarricades and frontierConfig.GetMaxActiveBarricades(level) or 0
+    local previousCap = level > 1 and frontierConfig and frontierConfig.GetMaxActiveBarricades and frontierConfig.GetMaxActiveBarricades(level - 1) or 0
     return {
         enabled = true,
         workPoints = 30 + (level * 18),
         xpReward = 150 + (level * 20),
         recipe = buildRecipe(level),
         effects = {
-            expandsMap = level > 1,
-            unlockRing = math.max(1, level - 1)
+            maxActiveBarricades = currentCap,
+            barricadeCapDelta = math.max(0, currentCap - previousCap)
         }
     }
 end

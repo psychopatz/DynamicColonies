@@ -388,9 +388,14 @@ local function normalizeMode(mode)
     return "build"
 end
 
-local function getProjectDefinition(buildingType, targetLevel, mode, installKey)
+local function getProjectDefinition(buildingType, targetLevel, mode, installKey, plotX, plotY)
     if normalizeMode(mode) == "install" then
         return Config.GetInstallDefinition and Config.GetInstallDefinition(buildingType, installKey) or nil
+    end
+    if tostring(buildingType or "") == "Barricade"
+        and Config.Frontier
+        and Config.Frontier.GetBarricadeLevelDefinition then
+        return Config.Frontier.GetBarricadeLevelDefinition(targetLevel, plotX, plotY)
     end
     return Config.GetLevelDefinition(buildingType, targetLevel)
 end
@@ -577,6 +582,38 @@ function Buildings.ResolveProjectTarget(ownerUsername, buildingType, mode, plotX
         }, nil
     end
 
+    if normalizedBuildingType == "Barricade" then
+        if normalizedMode ~= "build" then
+            return nil, "Barricades cannot be upgraded or installed."
+        end
+        if not Buildings.OwnerHasHeadquarters(owner) then
+            return nil, "Build Headquarters first."
+        end
+        if not Buildings.IsFrontierPlot or not Buildings.IsFrontierPlot(owner, x, y) then
+            return nil, "Barricades can only be built on locked frontier plots."
+        end
+
+        local activeBarricades = Buildings.GetActiveBarricadeCount and Buildings.GetActiveBarricadeCount(owner) or 0
+        local maxBarricades = Buildings.GetMaxActiveBarricades and Buildings.GetMaxActiveBarricades(owner) or 0
+        if maxBarricades <= 0 then
+            return nil, "Upgrade Headquarters to unlock barricade capacity."
+        end
+        if activeBarricades >= maxBarricades then
+            return nil, "Headquarters barricade capacity is full."
+        end
+
+        return {
+            ownerUsername = owner,
+            instance = nil,
+            plot = plot,
+            currentLevel = 0,
+            targetLevel = 1,
+            mode = "build",
+            plotX = x,
+            plotY = y
+        }, nil
+    end
+
     if activeProject then
         return nil, "That plot already has an active project."
     end
@@ -611,7 +648,7 @@ function Buildings.ResolveProjectTarget(ownerUsername, buildingType, mode, plotX
         end
     end
 
-    local levelDefinition = Config.GetLevelDefinition(normalizedBuildingType, 1)
+    local levelDefinition = getProjectDefinition(normalizedBuildingType, 1, "build", nil, x, y)
     if not levelDefinition or levelDefinition.enabled ~= true then
         return nil, "That building is not available yet."
     end
@@ -747,7 +784,14 @@ function Buildings.BuildProjectPreview(ownerUsername, buildingType, mode, plotX,
         return preview
     end
 
-    local projectDefinition = getProjectDefinition(buildingType, target.targetLevel, target.mode, target.installKey)
+    local projectDefinition = getProjectDefinition(
+        buildingType,
+        target.targetLevel,
+        target.mode,
+        target.installKey,
+        target.plotX,
+        target.plotY
+    )
     if not projectDefinition or projectDefinition.enabled == false then
         preview.reason = "That level is not available yet."
         return preview
@@ -771,18 +815,56 @@ function Buildings.BuildProjectPreview(ownerUsername, buildingType, mode, plotX,
 end
 
 function Buildings.BuildPlotBuildOptions(ownerUsername, plotX, plotY, sourcePlayer)
+    local owner = getOwnerUsername(ownerUsername)
+    local plot, state = Buildings.GetPlotWithState(owner, plotX, plotY)
     local options = {}
+
+    if tostring(state or "") == tostring(Buildings.MapConstants.PlotStates.Locked) then
+        if not (Buildings.IsFrontierPlot and Buildings.IsFrontierPlot(owner, plotX, plotY)) then
+            return options
+        end
+
+        local definition = Config.GetDefinition and Config.GetDefinition("Barricade") or nil
+        local preview = Buildings.BuildProjectPreview(owner, "Barricade", "build", plotX, plotY, nil, nil, sourcePlayer)
+        local effectLines = {
+            "Claims this frontier tile and uses 1 barricade slot."
+        }
+        if preview.effects and preview.effects.ringDistance then
+            effectLines[#effectLines + 1] = "Ring Distance: " .. tostring(preview.effects.ringDistance)
+        end
+        if preview.effects and preview.effects.barricadeHP then
+            effectLines[#effectLines + 1] = "HP Placeholder: " .. tostring(preview.effects.barricadeHP)
+        end
+
+        options[#options + 1] = {
+            buildingType = "Barricade",
+            displayName = definition and definition.displayName or "Barricade",
+            iconPath = definition and definition.iconPath or nil,
+            enabled = preview.available == true,
+            disabledReason = preview.available == true and nil or preview.reason,
+            preview = preview,
+            description = "Secures and claims one adjacent locked tile. Demolish older barricades to free interior plots as your border moves outward.",
+            effectLines = effectLines
+        }
+
+        return options
+    end
+
+    if tostring(state or "") ~= tostring(Buildings.MapConstants.PlotStates.Empty) or plot.unlocked ~= true then
+        return options
+    end
+
     for _, definition in ipairs(Config.GetDefinitionList and Config.GetDefinitionList() or {}) do
+        if tostring(definition and definition.buildingType or "") ~= "Barricade" then
         local preview = Buildings.BuildProjectPreview(ownerUsername, definition.buildingType, "build", plotX, plotY, nil, nil, sourcePlayer)
         local description = "Placeholder building."
         local effectLines = {}
 
         if definition.buildingType == "Headquarters" then
-            description = "Establishes the settlement core. Upgrading Headquarters unlocks new outer plots around your base."
-            if preview.targetLevel and preview.targetLevel > 1 then
-                effectLines[#effectLines + 1] = "Unlocks the next Headquarters border expansion."
-            else
-                effectLines[#effectLines + 1] = "Required to begin settlement expansion."
+            description = "Establishes the settlement core. Upgrading Headquarters increases how many barricade frontier tiles can exist at once."
+            effectLines[#effectLines + 1] = "Barricade Capacity: " .. tostring(preview.effects and preview.effects.maxActiveBarricades or 0)
+            if tonumber(preview.effects and preview.effects.barricadeCapDelta) and tonumber(preview.effects and preview.effects.barricadeCapDelta) > 0 then
+                effectLines[#effectLines + 1] = "Upgrade Gain: +" .. tostring(preview.effects.barricadeCapDelta) .. " barricade slots"
             end
         elseif definition.buildingType == "Barracks" then
             description = "Provides housing for your workers and improves recovery for the occupants living inside."
@@ -821,6 +903,7 @@ function Buildings.BuildPlotBuildOptions(ownerUsername, plotX, plotY, sourcePlay
             description = description,
             effectLines = effectLines
         }
+        end
     end
     return options
 end

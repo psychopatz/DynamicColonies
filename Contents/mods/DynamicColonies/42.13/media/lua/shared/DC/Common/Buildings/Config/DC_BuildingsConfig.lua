@@ -161,8 +161,8 @@ Config.Definitions = {
         buildingType = "Barricade",
         displayName = "Barricade",
         iconPath = "media/ui/Buildings/DC_Barricade.png",
-        enabled = false,
-        maxLevel = 3,
+        enabled = true,
+        maxLevel = 1,
         isInfinite = false,
         levels = {}
     }),
@@ -332,6 +332,9 @@ function Config.GetDefinition(buildingType)
     if normalized == "Headquarters" and Config.HQ and Config.HQ.GetDefinition then
         return Config.HQ.GetDefinition()
     end
+    if normalized == "Barricade" and Config.Frontier and Config.Frontier.GetBarricadeDefinition then
+        return Config.Frontier.GetBarricadeDefinition()
+    end
     return Config.Definitions[normalized]
 end
 
@@ -351,6 +354,9 @@ function Config.GetLevelDefinition(buildingType, level)
     local levelIndex = math.max(0, math.floor(tonumber(level) or 0))
     if normalized == "Headquarters" and Config.HQ and Config.HQ.GetLevelDefinition then
         return Config.HQ.GetLevelDefinition(levelIndex)
+    end
+    if normalized == "Barricade" and Config.Frontier and Config.Frontier.GetBarricadeLevelDefinition then
+        return Config.Frontier.GetBarricadeLevelDefinition(levelIndex, 0, 0)
     end
 
     local definition = Config.GetDefinition(normalized)

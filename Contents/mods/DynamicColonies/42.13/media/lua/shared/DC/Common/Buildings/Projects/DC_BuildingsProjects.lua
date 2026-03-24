@@ -17,6 +17,18 @@ local function getSkills()
     return DC_Colony and DC_Colony.Skills or nil
 end
 
+local function getProjectDefinitionForTarget(buildingType, target)
+    if target and target.mode == "install" then
+        return Config.GetInstallDefinition(buildingType, target.installKey)
+    end
+    if tostring(buildingType or "") == "Barricade"
+        and Config.Frontier
+        and Config.Frontier.GetBarricadeLevelDefinition then
+        return Config.Frontier.GetBarricadeLevelDefinition(target and target.targetLevel or 1, target and target.plotX or 0, target and target.plotY or 0)
+    end
+    return Config.GetLevelDefinition(buildingType, target and target.targetLevel or 1)
+end
+
 local function createProjectRecord(owner, worker, buildingType, target, projectDefinition)
     local labourConfig = getColonyConfig()
     return {
@@ -108,9 +120,7 @@ function Buildings.StartProject(ownerUsername, workerID, buildingType, mode, plo
         return false, targetReason, nil
     end
 
-    local projectDefinition = target.mode == "install"
-        and Config.GetInstallDefinition(buildingType, target.installKey)
-        or Config.GetLevelDefinition(buildingType, target.targetLevel)
+    local projectDefinition = getProjectDefinitionForTarget(buildingType, target)
     if not projectDefinition or projectDefinition.enabled == false then
         return false, "That level is not available yet.", nil
     end
@@ -131,9 +141,7 @@ function Buildings.QueueProject(ownerUsername, buildingType, mode, plotX, plotY,
         return false, targetReason, nil
     end
 
-    local projectDefinition = target.mode == "install"
-        and Config.GetInstallDefinition(buildingType, target.installKey)
-        or Config.GetLevelDefinition(buildingType, target.targetLevel)
+    local projectDefinition = getProjectDefinitionForTarget(buildingType, target)
     if not projectDefinition or projectDefinition.enabled == false then
         return false, "That level is not available yet.", nil
     end
@@ -201,10 +209,6 @@ function Buildings.CompleteProject(project)
         instance.plotX = math.floor(tonumber(project.plotX) or 0)
         instance.plotY = math.floor(tonumber(project.plotY) or 0)
         Buildings.UnlockPlotForOwner(owner, instance.plotX, instance.plotY, instance.plotX == 0 and instance.plotY == 0 and Buildings.MapConstants.PlotKinds.HQOnly or Buildings.MapConstants.PlotKinds.Standard)
-
-        if tostring(project.buildingType or "") == "Headquarters" and tostring(project.mode or "") == "upgrade" then
-            Buildings.ExpandMapForHeadquartersUpgrade(owner)
-        end
     end
 
     project.status = "Completed"

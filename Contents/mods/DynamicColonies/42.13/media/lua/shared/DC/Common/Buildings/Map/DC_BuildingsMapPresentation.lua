@@ -64,8 +64,13 @@ function Buildings.BuildMapSnapshot(ownerUsername, sourcePlayer)
     local owner = DC_Colony and DC_Colony.Config and DC_Colony.Config.GetOwnerUsername
         and DC_Colony.Config.GetOwnerUsername(ownerUsername)
         or tostring(ownerUsername or "local")
-    local visibleRing = Buildings.GetVisibleRing(owner)
     local housing = Buildings.BuildHousingAssignment(owner)
+    local territory = Buildings.GetTerritorySummary and Buildings.GetTerritorySummary(owner) or {
+        headquartersLevel = 0,
+        unlockedPlotCount = 0,
+        activeBarricadeCount = 0,
+        maxActiveBarricades = 0
+    }
     local occupantsByBuildingID = {}
     for _, summary in ipairs(housing.buildings or {}) do
         occupantsByBuildingID[tostring(summary.buildingID or "")] = summary.occupants or {}
@@ -73,81 +78,120 @@ function Buildings.BuildMapSnapshot(ownerUsername, sourcePlayer)
 
     local activeProjects = Buildings.GetOwnerProjectList(owner)
     local projectsByPlotKey = {}
+    local visiblePlotKeys = {}
     for _, project in ipairs(activeProjects) do
         projectsByPlotKey[Buildings.GetPlotKey(project.plotX, project.plotY)] = summarizeProject(project, sourcePlayer)
+        visiblePlotKeys[Buildings.GetPlotKey(project.plotX, project.plotY)] = {
+            x = math.floor(tonumber(project.plotX) or 0),
+            y = math.floor(tonumber(project.plotY) or 0)
+        }
+    end
+
+    for _, plot in ipairs(Buildings.GetUnlockedPlotEntries and Buildings.GetUnlockedPlotEntries(owner) or {}) do
+        visiblePlotKeys[Buildings.GetPlotKey(plot.x, plot.y)] = {
+            x = math.floor(tonumber(plot.x) or 0),
+            y = math.floor(tonumber(plot.y) or 0)
+        }
+    end
+
+    for _, plot in ipairs(Buildings.GetFrontierCandidatePlots and Buildings.GetFrontierCandidatePlots(owner) or {}) do
+        visiblePlotKeys[Buildings.GetPlotKey(plot.x, plot.y)] = {
+            x = math.floor(tonumber(plot.x) or 0),
+            y = math.floor(tonumber(plot.y) or 0)
+        }
     end
 
     local plots = {}
-    for y = -visibleRing, visibleRing do
-        for x = -visibleRing, visibleRing do
-            local plot, state, building = Buildings.GetPlotWithState(owner, x, y)
-            local key = Buildings.GetPlotKey(x, y)
-            local definition = building and Config.GetDefinition(building.buildingType) or nil
-            local project = projectsByPlotKey[key]
+    for _, entry in pairs(visiblePlotKeys) do
+        local x = math.floor(tonumber(entry and entry.x) or 0)
+        local y = math.floor(tonumber(entry and entry.y) or 0)
+        local plot, state, building = Buildings.GetPlotWithState(owner, x, y)
+        local key = Buildings.GetPlotKey(x, y)
+        local definition = building and Config.GetDefinition(building.buildingType) or nil
+        local project = projectsByPlotKey[key]
+        local isFrontierPlot = Buildings.IsFrontierPlot and Buildings.IsFrontierPlot(owner, x, y) or false
+        local canEvaluateBuildOptions = (tostring(state or "") == tostring(Buildings.MapConstants.PlotStates.Empty) and plot.unlocked == true)
+            or (tostring(state or "") == tostring(Buildings.MapConstants.PlotStates.Locked) and isFrontierPlot)
+        local buildOptions = canEvaluateBuildOptions and Buildings.BuildPlotBuildOptions and Buildings.BuildPlotBuildOptions(owner, x, y, sourcePlayer) or {}
 
-            local plotEntry = {
-                key = key,
-                x = x,
-                y = y,
-                kind = plot.kind,
-                unlocked = plot.unlocked == true,
-                state = state,
-                availableActions = {
-                    canBuild = state == Buildings.MapConstants.PlotStates.Empty and plot.unlocked == true,
-                    canInspect = building ~= nil,
-                    canUpgrade = false,
-                    canInstall = false
-                },
-                buildOptions = {},
-                building = nil,
-                project = project
+        local plotEntry = {
+            key = key,
+            x = x,
+            y = y,
+            kind = plot.kind,
+            unlocked = plot.unlocked == true,
+            frontierCandidate = isFrontierPlot,
+            territory = shallowCopy(territory),
+            state = state,
+            availableActions = {
+                canBuild = canEvaluateBuildOptions and #buildOptions > 0,
+                canInspect = building ~= nil or project ~= nil,
+                canUpgrade = false,
+                canInstall = false
+            },
+            buildOptions = buildOptions,
+            building = nil,
+            project = project
+        }
+
+        if building then
+            local upgradePreview = Buildings.BuildProjectPreview(owner, building.buildingType, "upgrade", x, y, building.buildingID, nil, sourcePlayer)
+            local installOptions = Buildings.BuildBuildingInstallOptions and Buildings.BuildBuildingInstallOptions(owner, x, y, building.buildingID, sourcePlayer) or {}
+            local canDestroy, destroyReason = Buildings.CanDestroyBuilding(owner, x, y, building.buildingID)
+            local currentLevelDefinition = Config.GetLevelDefinition and Config.GetLevelDefinition(building.buildingType, building.level) or nil
+            if tostring(building.buildingType or "") == "Barricade"
+                and Config.Frontier
+                and Config.Frontier.GetBarricadeLevelDefinition then
+                currentLevelDefinition = Config.Frontier.GetBarricadeLevelDefinition(building.level, x, y)
+            end
+            plotEntry.availableActions.canUpgrade = upgradePreview.available == true
+            plotEntry.availableActions.canInstall = #installOptions > 0
+            plotEntry.availableActions.canDestroy = canDestroy == true
+            plotEntry.building = {
+                buildingID = building.buildingID,
+                buildingType = building.buildingType,
+                displayName = definition and definition.displayName or building.buildingType,
+                iconPath = definition and definition.iconPath or nil,
+                level = math.max(0, math.floor(tonumber(building.level) or 0)),
+                plotX = x,
+                plotY = y,
+                isInfinite = definition and definition.isInfinite == true or false,
+                maxLevel = definition and definition.maxLevel or 0,
+                installs = Buildings.GetBuildingInstallCounts and Buildings.GetBuildingInstallCounts(building) or {},
+                installOptions = installOptions,
+                warehouseCapacityContribution = Buildings.GetWarehouseBuildingCapacityContribution and Buildings.GetWarehouseBuildingCapacityContribution(building) or 0,
+                barricadeHP = currentLevelDefinition and currentLevelDefinition.effects and currentLevelDefinition.effects.barricadeHP or nil,
+                occupants = occupantsByBuildingID[tostring(building.buildingID or "")] or {},
+                upgradePreview = upgradePreview,
+                canDestroy = canDestroy == true,
+                destroyReason = destroyReason
             }
-
-            if state == Buildings.MapConstants.PlotStates.Empty and plot.unlocked == true then
-                plotEntry.buildOptions = Buildings.BuildPlotBuildOptions(owner, x, y, sourcePlayer)
-            end
-
-            if building then
-                local upgradePreview = Buildings.BuildProjectPreview(owner, building.buildingType, "upgrade", x, y, building.buildingID, nil, sourcePlayer)
-                local installOptions = Buildings.BuildBuildingInstallOptions and Buildings.BuildBuildingInstallOptions(owner, x, y, building.buildingID, sourcePlayer) or {}
-                local canDestroy, destroyReason = Buildings.CanDestroyBuilding(owner, x, y, building.buildingID)
-                plotEntry.availableActions.canUpgrade = upgradePreview.available == true
-                plotEntry.availableActions.canInstall = #installOptions > 0
-                plotEntry.availableActions.canDestroy = canDestroy == true
-                plotEntry.building = {
-                    buildingID = building.buildingID,
-                    buildingType = building.buildingType,
-                    displayName = definition and definition.displayName or building.buildingType,
-                    iconPath = definition and definition.iconPath or nil,
-                    level = math.max(0, math.floor(tonumber(building.level) or 0)),
-                    plotX = x,
-                    plotY = y,
-                    isInfinite = definition and definition.isInfinite == true or false,
-                    maxLevel = definition and definition.maxLevel or 0,
-                    installs = Buildings.GetBuildingInstallCounts and Buildings.GetBuildingInstallCounts(building) or {},
-                    installOptions = installOptions,
-                    warehouseCapacityContribution = Buildings.GetWarehouseBuildingCapacityContribution and Buildings.GetWarehouseBuildingCapacityContribution(building) or 0,
-                    occupants = occupantsByBuildingID[tostring(building.buildingID or "")] or {},
-                    upgradePreview = upgradePreview,
-                    canDestroy = canDestroy == true,
-                    destroyReason = destroyReason
-                }
-            end
-
-            plots[#plots + 1] = plotEntry
         end
+
+        plots[#plots + 1] = plotEntry
     end
 
+    table.sort(plots, function(a, b)
+        if tonumber(a.y) == tonumber(b.y) then
+            return tonumber(a.x) < tonumber(b.x)
+        end
+        return tonumber(a.y) < tonumber(b.y)
+    end)
+
+    local bounds = Buildings.BuildVisibleBounds and Buildings.BuildVisibleBounds(plots) or {
+        minX = 0,
+        maxX = 0,
+        minY = 0,
+        maxY = 0
+    }
+
     return {
-        bounds = {
-            minX = -visibleRing,
-            maxX = visibleRing,
-            minY = -visibleRing,
-            maxY = visibleRing
-        },
-        visibleRing = visibleRing,
-        currentRing = math.max(1, math.floor(tonumber(Buildings.GetMapDataForOwner(owner).currentRing) or 1)),
-        nextUnlockDirection = Buildings.GetMapDataForOwner(owner).nextUnlockDirection,
+        bounds = bounds,
+        unlockedBounds = bounds,
+        headquartersLevel = territory.headquartersLevel,
+        unlockedPlotCount = territory.unlockedPlotCount,
+        activeBarricadeCount = territory.activeBarricadeCount,
+        maxActiveBarricades = territory.maxActiveBarricades,
         plots = plots
     }
 end

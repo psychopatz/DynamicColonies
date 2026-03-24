@@ -2,6 +2,7 @@ DC_BuildingsUIUtils = DC_BuildingsUIUtils or {}
 
 DC_BuildingsUIUtils.Colors = {
     locked = { r = 0.12, g = 0.12, b = 0.12, a = 0.9 },
+    frontierLocked = { r = 0.18, g = 0.1, b = 0.1, a = 0.92 },
     empty = { r = 0.18, g = 0.18, b = 0.18, a = 0.9 },
     reserved = { r = 0.85, g = 0.72, b = 0.15, a = 0.95 },
     built = { r = 0.26, g = 0.36, b = 0.24, a = 0.95 },
@@ -11,7 +12,13 @@ DC_BuildingsUIUtils.Colors = {
 
 function DC_BuildingsUIUtils.GetPlotColor(plot)
     local colors = DC_BuildingsUIUtils.Colors
-    if not plot or plot.state == "Locked" then
+    if not plot then
+        return colors.locked
+    end
+    if plot.state == "Locked" and plot.frontierCandidate == true then
+        return colors.frontierLocked
+    end
+    if plot.state == "Locked" then
         return colors.locked
     end
     if plot.state == "Reserved" then
@@ -32,6 +39,9 @@ function DC_BuildingsUIUtils.GetPlotTitle(plot)
     end
     if plot.project then
         return tostring(plot.project.displayName or plot.project.buildingType or "Building")
+    end
+    if plot.frontierCandidate == true then
+        return "Frontier"
     end
     if plot.kind == "HQOnly" then
         return "HQ"
