@@ -130,7 +130,9 @@ function Internal.buildActivityLogText(worker)
     end
 
     local text = ""
-    for index = #entries, 1, -1 do
+    local newestIndex = #entries
+    local oldestIndex = math.max(1, newestIndex - 11)
+    for index = newestIndex, oldestIndex, -1 do
         local entry = entries[index]
         local timestamp = formatActivityTimestamp(entry and entry.hour)
         local message = tostring((entry and (entry.text or entry.message)) or "Activity recorded.")

@@ -7,7 +7,6 @@ local Registry = DC_Colony.Registry
 local Skills = DC_Colony.Skills
 
 function Registry.GetWorkerSummary(worker)
-    Registry.RecalculateWorker(worker)
     local profile = Config.GetJobProfile(worker.jobType)
     local workTarget = Config.GetEffectiveWorkTarget and Config.GetEffectiveWorkTarget(worker, profile)
         or (Config.GetEffectiveCycleHours and Config.GetEffectiveCycleHours(worker, profile))
@@ -150,15 +149,22 @@ function Registry.GetWorkerSummariesForOwner(ownerUsername)
     return summaries
 end
 
-function Registry.GetWorkerDetailsForOwner(ownerUsername, workerID, includeWarehouseLedgers)
+function Registry.GetWorkerDetailsForOwner(ownerUsername, workerID, includeWarehouseLedgers, includeWorkerLedgers)
     local worker = Registry.GetWorkerForOwner(ownerUsername, workerID)
     if not worker then return nil end
     Registry.RecalculateWorker(worker)
     local detail = Registry.Internal.CopyShallow(worker)
+    local includeWorkerLedgerData = includeWorkerLedgers ~= false
     if Skills and Skills.BuildClientSkillSnapshotForWorker then
         detail.skills = Skills.BuildClientSkillSnapshotForWorker(worker)
         detail.primarySkillID = Skills.GetPrimarySkillID and Skills.GetPrimarySkillID(worker) or nil
         detail.jobSkillEffects = Skills.GetWorkerJobEffects and Skills.GetWorkerJobEffects(worker) or nil
+    end
+    if not includeWorkerLedgerData then
+        detail.nutritionLedger = nil
+        detail.toolLedger = nil
+        detail.haulLedger = nil
+        detail.outputLedger = nil
     end
     local Warehouse = DC_Colony and DC_Colony.Warehouse or nil
     detail.warehouse = Warehouse and Warehouse.GetClientSnapshot and Warehouse.GetClientSnapshot(ownerUsername, includeWarehouseLedgers == true) or nil

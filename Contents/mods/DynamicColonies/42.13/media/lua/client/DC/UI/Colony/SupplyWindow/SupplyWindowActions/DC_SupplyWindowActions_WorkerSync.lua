@@ -7,7 +7,8 @@ function DC_SupplyWindow:onRefresh()
         local includeWarehouseLedgers = self.viewMode == ((DC_SupplyWindow.Internal.ViewModes or {}).Warehouse)
         self:sendColonyCommand("RequestWorkerDetails", {
             workerID = self.workerID,
-            includeWarehouseLedgers = includeWarehouseLedgers
+            includeWarehouseLedgers = includeWarehouseLedgers,
+            includeWorkerLedgers = true
         })
     end
 end
@@ -20,6 +21,7 @@ function DC_SupplyWindow:requestWorkerDetails()
     local includeWarehouseLedgers = self.viewMode == ((DC_SupplyWindow.Internal.ViewModes or {}).Warehouse)
     self:sendColonyCommand("RequestWorkerDetails", {
         workerID = self.workerID,
-        includeWarehouseLedgers = includeWarehouseLedgers
+        includeWarehouseLedgers = includeWarehouseLedgers,
+        includeWorkerLedgers = true
     })
 end

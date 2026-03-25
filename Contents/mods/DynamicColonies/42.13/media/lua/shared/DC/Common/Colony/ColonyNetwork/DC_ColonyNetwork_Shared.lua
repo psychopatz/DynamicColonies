@@ -40,9 +40,14 @@ function Internal.syncWorkerList(player)
     })
 end
 
-function Internal.syncWorkerDetail(player, workerID, includeWarehouseLedgers)
+function Internal.syncWorkerDetail(player, workerID, includeWarehouseLedgers, includeWorkerLedgers)
     local owner = Config.GetOwnerUsername(player)
-    local worker = Registry.GetWorkerDetailsForOwner(owner, workerID, includeWarehouseLedgers ~= false)
+    local worker = Registry.GetWorkerDetailsForOwner(
+        owner,
+        workerID,
+        includeWarehouseLedgers ~= false,
+        includeWorkerLedgers ~= false
+    )
     Internal.sendResponse(player, Config.COMMAND_MODULE, "SyncWorkerDetails", {
         worker = worker
     })

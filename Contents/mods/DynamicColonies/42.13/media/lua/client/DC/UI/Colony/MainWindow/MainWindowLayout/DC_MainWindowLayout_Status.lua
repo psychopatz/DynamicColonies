@@ -9,7 +9,12 @@ function DC_MainWindow:updateStatus(text)
         return
     end
 
-    self.statusText:setText(" <RGB:0.75,0.75,0.75> " .. tostring(text or "") .. " ")
+    local nextStatus = tostring(text or "")
+    if self.lastStatusText == nextStatus then
+        return
+    end
+
+    self.lastStatusText = nextStatus
+    self.statusText:setText(" <RGB:0.75,0.75,0.75> " .. nextStatus .. " ")
     MainWindowLayout.refreshRichTextPanel(self.statusText)
 end
-

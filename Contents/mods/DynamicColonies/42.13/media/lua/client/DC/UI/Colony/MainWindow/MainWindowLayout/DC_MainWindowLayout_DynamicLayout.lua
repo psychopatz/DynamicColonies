@@ -4,10 +4,12 @@ DC_MainWindow.Internal = DC_MainWindow.Internal or {}
 local Internal = DC_MainWindow.Internal
 local MainWindowLayout = Internal.MainWindowLayout or {}
 
-local function applyWindowLayout(window)
+local function applyWindowLayout(window, options)
     if not window then
         return
     end
+
+    options = options or {}
 
     local th = window:titleBarHeight()
     local pad = 10
@@ -31,10 +33,17 @@ local function applyWindowLayout(window)
         MainWindowLayout.DETAIL_PANEL_MIN_HEIGHT,
         math.min(maxDetailHeight, math.floor((detailsAreaHeight - splitGap) * 0.38))
     )
+    local refreshDetailText = options.refreshDetailText ~= false
+    local refreshActivityText = options.refreshActivityText ~= false
+    local refreshStatusText = options.refreshStatusText ~= false
 
     if window.detailText then
+        local currentDetailWidth = tonumber(window.detailText:getWidth()) or tonumber(window.detailText.width) or 0
+        local detailTextWidthChanged = math.abs(currentDetailWidth - textPanelWidth) > 0.5
         window.detailText:setWidth(textPanelWidth)
-        MainWindowLayout.refreshRichTextPanel(window.detailText)
+        if refreshDetailText or detailTextWidthChanged then
+            MainWindowLayout.refreshRichTextPanel(window.detailText)
+        end
         local detailContentHeight = MainWindowLayout.getRichTextContentHeight(window.detailText)
         if detailContentHeight > 0 then
             local desiredHeight = detailContentHeight + (MainWindowLayout.PANEL_INNER_PAD * 2) + 4
@@ -67,11 +76,15 @@ local function applyWindowLayout(window)
     end
 
     if window.detailText then
+        local currentDetailWidth = tonumber(window.detailText:getWidth()) or tonumber(window.detailText.width) or 0
+        local detailTextWidthChanged = math.abs(currentDetailWidth - textPanelWidth) > 0.5
         window.detailText:setX(MainWindowLayout.PANEL_INNER_PAD)
         window.detailText:setY(MainWindowLayout.PANEL_HEADER_HEIGHT)
         window.detailText:setWidth(textPanelWidth)
         window.detailText:setHeight(math.max(0, detailHeight - MainWindowLayout.PANEL_HEADER_HEIGHT - MainWindowLayout.PANEL_INNER_PAD))
-        MainWindowLayout.refreshRichTextPanel(window.detailText)
+        if refreshDetailText or detailTextWidthChanged then
+            MainWindowLayout.refreshRichTextPanel(window.detailText)
+        end
         if window.detailText.vscroll then
             window.detailText.vscroll:setHeight(window.detailText:getHeight())
         end
@@ -85,22 +98,30 @@ local function applyWindowLayout(window)
     end
 
     if window.activityLogText then
+        local currentActivityWidth = tonumber(window.activityLogText:getWidth()) or tonumber(window.activityLogText.width) or 0
+        local activityTextWidthChanged = math.abs(currentActivityWidth - textPanelWidth) > 0.5
         window.activityLogText:setX(MainWindowLayout.PANEL_INNER_PAD)
         window.activityLogText:setY(MainWindowLayout.PANEL_HEADER_HEIGHT)
         window.activityLogText:setWidth(textPanelWidth)
         window.activityLogText:setHeight(math.max(0, activityHeight - MainWindowLayout.PANEL_HEADER_HEIGHT - MainWindowLayout.PANEL_INNER_PAD))
-        MainWindowLayout.refreshRichTextPanel(window.activityLogText)
+        if refreshActivityText or activityTextWidthChanged then
+            MainWindowLayout.refreshRichTextPanel(window.activityLogText)
+        end
         if window.activityLogText.vscroll then
             window.activityLogText.vscroll:setHeight(window.activityLogText:getHeight())
         end
     end
 
     if window.statusText then
+        local currentStatusWidth = tonumber(window.statusText:getWidth()) or tonumber(window.statusText.width) or 0
+        local statusTextWidthChanged = math.abs(currentStatusWidth - rightWidth) > 0.5
         window.statusText:setX(rightX)
         window.statusText:setY(window.height - footerH - 4)
         window.statusText:setWidth(rightWidth)
         window.statusText:setHeight(28)
-        MainWindowLayout.refreshRichTextPanel(window.statusText)
+        if refreshStatusText or statusTextWidthChanged then
+            MainWindowLayout.refreshRichTextPanel(window.statusText)
+        end
     end
 end
 

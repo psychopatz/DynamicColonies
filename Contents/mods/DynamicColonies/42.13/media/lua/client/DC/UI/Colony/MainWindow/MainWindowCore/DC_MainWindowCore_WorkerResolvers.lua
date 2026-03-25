@@ -15,10 +15,13 @@ function Internal.resolveWorkerSummaries()
     return {}
 end
 
-function Internal.resolveWorkerDetail(workerID)
+function Internal.resolveWorkerDetail(workerID, options)
     if not workerID then
         return nil
     end
+
+    options = options or {}
+    local includeWorkerLedgers = options.includeWorkerLedgers == true
 
     if isClient() and not isServer() then
         local cache = DC_MainWindow.cachedDetails or {}
@@ -26,9 +29,13 @@ function Internal.resolveWorkerDetail(workerID)
     end
 
     if DC_Colony and DC_Colony.Registry and DC_Colony.Registry.GetWorkerDetailsForOwner then
-        return DC_Colony.Registry.GetWorkerDetailsForOwner(Internal.getOwnerUsername(), workerID)
+        return DC_Colony.Registry.GetWorkerDetailsForOwner(
+            Internal.getOwnerUsername(),
+            workerID,
+            false,
+            includeWorkerLedgers
+        )
     end
 
     return nil
 end
-

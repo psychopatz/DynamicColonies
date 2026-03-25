@@ -24,7 +24,7 @@ local function resolveLiveWorker(workerID)
 
     local internal = DC_MainWindow and DC_MainWindow.Internal or nil
     if internal and type(internal.resolveWorkerDetail) == "function" then
-        return internal.resolveWorkerDetail(workerID)
+        return internal.resolveWorkerDetail(workerID, { includeWorkerLedgers = false })
     end
 
     return nil
@@ -192,7 +192,8 @@ function DC_ColonyCharacterWindow:requestWorkerDetails()
 
     sendColonyCommand("RequestWorkerDetails", {
         workerID = self.workerID,
-        includeWarehouseLedgers = false
+        includeWarehouseLedgers = false,
+        includeWorkerLedgers = false
     })
 end
 

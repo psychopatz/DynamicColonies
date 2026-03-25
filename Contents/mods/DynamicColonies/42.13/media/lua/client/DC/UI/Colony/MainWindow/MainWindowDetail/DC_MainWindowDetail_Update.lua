@@ -70,34 +70,6 @@ local function formatDurationHours(hoursLeft)
     return tostring(math.floor(safeHours + 0.5)) .. "h"
 end
 
-local function getJobDisplayName(worker, profile)
-    if isFunction(Internal.getJobDisplayName) then
-        return Internal.getJobDisplayName(worker, profile)
-    end
-    return tostring(profile and profile.displayName or worker and worker.jobType or "Unknown")
-end
-
-local function getScavengePresenceDetailLabel(worker)
-    if isFunction(Internal.getScavengePresenceDetailLabel) then
-        return Internal.getScavengePresenceDetailLabel(worker)
-    end
-    return tostring(worker and worker.presenceState or "Home")
-end
-
-local function getReturnReasonLabel(worker)
-    if isFunction(Internal.getReturnReasonLabel) then
-        return Internal.getReturnReasonLabel(worker)
-    end
-    return tostring(worker and worker.returnReason or "None")
-end
-
-local function getScavengeCapabilitySummary(worker)
-    if isFunction(Internal.getScavengeCapabilitySummary) then
-        return Internal.getScavengeCapabilitySummary(worker)
-    end
-    return "Open containers only"
-end
-
 local function buildActivityLogText(worker)
     if isFunction(Internal.buildActivityLogText) then
         return Internal.buildActivityLogText(worker)
@@ -105,10 +77,47 @@ local function buildActivityLogText(worker)
     return " <RGB:0.62,0.62,0.62> No recent worker activity yet. <LINE> "
 end
 
+local function formatHousingSummary(worker)
+    local housingState = tostring(worker and worker.housingState or "Unhoused")
+    local buildingType = tostring(worker and worker.housingBuildingType or "")
+    local isHoused = housingState ~= "" and housingState ~= "Unhoused"
+
+    if not isHoused then
+        return "No"
+    end
+
+    if buildingType ~= "" and buildingType ~= "None" then
+        return "Yes - " .. buildingType
+    end
+
+    return "Yes"
+end
+
+local function updateRichTextPanel(window, panel, cacheField, nextText, resetScroll)
+    if not window or not panel then
+        return false
+    end
+
+    local changed = window[cacheField] ~= nextText
+    if changed then
+        window[cacheField] = nextText
+        panel:setText(nextText)
+        MainWindowLayout.refreshRichTextPanel(panel, resetScroll and 0 or nil)
+        return true
+    end
+
+    if resetScroll then
+        MainWindowLayout.setRichTextPanelScroll(panel, 0)
+    end
+
+    return false
+end
+
 function DC_MainWindow:updateWorkerDetail(worker)
     local previousWorkerID = self.selectedWorker and self.selectedWorker.workerID or nil
     local nextWorkerID = worker and worker.workerID or nil
-    local shouldResetScroll = previousWorkerID ~= nextWorkerID
+    local workerChanged = previousWorkerID ~= nextWorkerID
+    local shouldResetScroll = workerChanged
 
     self.selectedWorker = worker
 
@@ -120,17 +129,27 @@ function DC_MainWindow:updateWorkerDetail(worker)
         return
     end
 
-    if self.applyDynamicLayout then
-        self:applyDynamicLayout()
-    end
-
     if not worker then
-        self.detailText:setText(" <RGB:0.6,0.6,0.6> No worker selected. Recruit one from ConversationUI or pick an existing labour worker from the list. ")
-        MainWindowLayout.refreshRichTextPanel(self.detailText, 0)
-        self.activityLogText:setText(" <RGB:0.62,0.62,0.62> No recent worker activity yet. ")
-        MainWindowLayout.refreshRichTextPanel(self.activityLogText, 0)
-        if self.applyDynamicLayout then
-            self:applyDynamicLayout()
+        local detailChanged = updateRichTextPanel(
+            self,
+            self.detailText,
+            "lastRenderedDetailText",
+            " <RGB:0.6,0.6,0.6> No worker selected. Recruit one from ConversationUI or pick an existing labour worker from the list. ",
+            true
+        )
+        local activityChanged = updateRichTextPanel(
+            self,
+            self.activityLogText,
+            "lastRenderedActivityLogText",
+            " <RGB:0.62,0.62,0.62> No recent worker activity yet. ",
+            true
+        )
+        if self.applyDynamicLayout and (detailChanged or activityChanged or workerChanged) then
+            self:applyDynamicLayout({
+                refreshDetailText = false,
+                refreshActivityText = false,
+                refreshStatusText = false
+            })
         end
         if self.btnToggleJob then
             self.btnToggleJob:setTitle("Start Job")
@@ -153,7 +172,6 @@ function DC_MainWindow:updateWorkerDetail(worker)
 
     local config = getConfig()
     local profile = (isFunction(config.GetJobProfile) and config.GetJobProfile(worker.jobType)) or {}
-    local equipmentDefinitions = (isFunction(config.GetEquipmentRequirementDefinitions) and config.GetEquipmentRequirementDefinitions(worker.jobType)) or {}
     local jobSkillEffects = worker.jobSkillEffects or {
         skillID = worker.jobSkillID,
         skillLabel = worker.jobSkillLabel,
@@ -164,133 +182,40 @@ function DC_MainWindow:updateWorkerDetail(worker)
     local normalizedJobType = isFunction(config.NormalizeJobType) and config.NormalizeJobType(worker.jobType) or worker.jobType
     local stateLabel = tostring(worker.state or "")
     local deadState = tostring((config.States or {}).Dead or "Dead")
-    local workProgressData = isFunction(Internal.getWorkerProgressData) and Internal.getWorkerProgressData(worker, profile) or nil
-    local toolLabels = {}
-    for _, definition in ipairs(equipmentDefinitions) do
-        toolLabels[#toolLabels + 1] = tostring(definition.label or definition.requirementKey or "Tool")
-    end
-    local toolSummary = (#toolLabels > 0) and table.concat(toolLabels, ", ")
-        or ((normalizedJobType == (config.JobTypes and config.JobTypes.Scavenge)) and "Optional scavenger kit" or "Optional")
     local text = ""
-    text = text .. " <RGB:1,1,1> <SIZE:Medium> Overview <LINE> "
-    text = text .. " <RGB:0.72,0.72,0.72> Job Enabled: <RGB:1,1,1> " .. formatBool(worker.jobEnabled == true) .. " <LINE> "
-    text = text .. " <RGB:0.72,0.72,0.72> Skill Speed Bonus: <RGB:1,1,1> x" .. formatDecimal(bonusMultiplier, 2) .. " <LINE> "
+    text = text .. " <RGB:1,1,1> <SIZE:Medium> Worker Status <LINE> "
+    text = text .. " <RGB:0.72,0.72,0.72> Tool State: <RGB:1,1,1> " .. tostring(worker.toolState or "Missing") .. " <LINE> "
+    text = text .. " <RGB:0.72,0.72,0.72> Housed: <RGB:1,1,1> " .. formatHousingSummary(worker) .. " <LINE> "
     if jobSkillEffects and jobSkillEffects.skillID then
         text = text .. " <RGB:0.72,0.72,0.72> Active Skill: <RGB:1,1,1> "
             .. tostring(jobSkillEffects.skillLabel or jobSkillEffects.skillID)
             .. " (Lv "
             .. tostring(jobSkillEffects.level or 0)
             .. ") <LINE> "
+    else
+        text = text .. " <RGB:0.72,0.72,0.72> Active Skill: <RGB:1,1,1> None <LINE> "
     end
-    text = text .. " <RGB:0.72,0.72,0.72> Stored Money: <RGB:1,1,1> $" .. formatReserveValue(worker.moneyStored) .. " <LINE> <LINE> "
-
-    text = text .. " <RGB:1,1,1> <SIZE:Medium> Housing <LINE> "
-    text = text .. " <RGB:0.72,0.72,0.72> Housing State: <RGB:1,1,1> " .. tostring(worker.housingState or "Unhoused") .. " <LINE> "
-    text = text .. " <RGB:0.72,0.72,0.72> Housing Building: <RGB:1,1,1> " .. tostring(worker.housingBuildingType or "None") .. " <LINE> "
-    text = text .. " <RGB:0.72,0.72,0.72> Recovery Multiplier: <RGB:1,1,1> x" .. formatDecimal(worker.housingRecoveryMultiplier or 0.33, 2) .. " <LINE> <LINE> "
-
-    text = text .. " <RGB:1,1,1> <SIZE:Medium> Medical Care <LINE> "
-    text = text .. " <RGB:0.72,0.72,0.72> Infirmary Bed: <RGB:1,1,1> " .. formatBool(worker.infirmaryBedAssigned == true) .. " <LINE> "
-    text = text .. " <RGB:0.72,0.72,0.72> Infirmary Building: <RGB:1,1,1> " .. tostring(worker.infirmaryBuildingType or "None") .. " <LINE> "
-    text = text .. " <RGB:0.72,0.72,0.72> Doctor Coverage: <RGB:1,1,1> " .. formatBool(worker.doctorCovered == true) .. " <LINE> "
-    text = text .. " <RGB:0.72,0.72,0.72> Sleep Healing: <RGB:1,1,1> " .. tostring(worker.sleepHealingSource or "None") .. " <LINE> "
-    text = text .. " <RGB:0.72,0.72,0.72> Healing Rate: <RGB:1,1,1> " .. formatDecimal(worker.sleepHealingRate or 0, 2) .. " HP/h <LINE> "
-    text = text .. " <RGB:0.72,0.72,0.72> Medical Supply Blocked: <RGB:1,1,1> " .. formatBool(worker.medicalSupplyBlocked == true) .. " <LINE> <LINE> "
+    text = text .. " <RGB:0.72,0.72,0.72> Skill Speed Bonus: <RGB:1,1,1> x" .. formatDecimal(bonusMultiplier, 2) .. " <LINE> "
 
     if stateLabel == deadState and tostring(worker.deathCause or "") ~= "" then
-        text = text .. " <RGB:0.88,0.52,0.52> Cause Of Death: <RGB:1,1,1> " .. tostring(worker.deathCause) .. " <LINE> <LINE> "
+        text = text .. " <RGB:0.88,0.52,0.52> Cause Of Death: <RGB:1,1,1> " .. tostring(worker.deathCause) .. " <LINE> "
     end
 
-    text = text .. " <RGB:1,1,1> <SIZE:Medium> Work Status <LINE> "
-    text = text .. " <RGB:0.72,0.72,0.72> Current Job: <RGB:1,1,1> " .. getJobDisplayName(worker, profile) .. " <LINE> "
-    if normalizedJobType == (config.JobTypes and config.JobTypes.Scavenge) then
-        text = text .. " <RGB:0.72,0.72,0.72> Location State: <RGB:1,1,1> " .. getScavengePresenceDetailLabel(worker) .. " <LINE> "
-        text = text .. " <RGB:0.72,0.72,0.72> Travel ETA: <RGB:1,1,1> " .. formatDecimal(worker.travelHoursRemaining or 0, 2) .. "h <LINE> "
-        text = text .. " <RGB:0.72,0.72,0.72> Return Reason: <RGB:1,1,1> " .. getReturnReasonLabel(worker) .. " <LINE> "
-        text = text .. " <RGB:0.72,0.72,0.72> Auto Repeat: <RGB:1,1,1> " .. formatBool((worker.autoRepeatJob == true) or (worker.autoRepeatScavenge == true)) .. " <LINE> "
-        text = text .. " <RGB:0.72,0.72,0.72> Home Coordinates: <RGB:1,1,1> " .. formatCoords(worker.homeX, worker.homeY, worker.homeZ) .. " <LINE> "
-    end
-    text = text .. " <RGB:0.72,0.72,0.72> Site State: <RGB:1,1,1> " .. tostring(worker.siteState or "Deferred") .. " <LINE> "
-    text = text .. " <RGB:0.72,0.72,0.72> Tool State: <RGB:1,1,1> " .. tostring(worker.toolState or "Missing") .. " <LINE> "
-    text = text .. " <RGB:0.72,0.72,0.72> Required Tools: <RGB:1,1,1> " .. toolSummary .. " <LINE> "
-    text = text .. " <RGB:0.72,0.72,0.72> Work Coordinates: <RGB:1,1,1> " .. formatCoords(worker.workX, worker.workY, worker.workZ) .. " <LINE> "
-    text = text .. " <RGB:0.72,0.72,0.72> Pending Output: <RGB:1,1,1> " .. tostring(worker.outputCount or 0) .. " <LINE> "
-    if worker.assignedProjectID then
-        text = text .. " <RGB:0.72,0.72,0.72> Building Project: <RGB:1,1,1> "
-            .. tostring(worker.assignedProjectBuildingType or "Project")
-            .. " L"
-            .. tostring(worker.assignedProjectTargetLevel or 1)
-            .. " <LINE> "
-    elseif normalizedJobType == (config.JobTypes and config.JobTypes.Builder) then
-        text = text .. " <RGB:0.72,0.72,0.72> Building Project: <RGB:1,1,1> No Project <LINE> "
-    end
-    if workProgressData then
-        local progressUnit = "h"
-        if normalizedJobType == (config.JobTypes and config.JobTypes.Scavenge) then
-            progressUnit = " work"
-        elseif normalizedJobType == (config.JobTypes and config.JobTypes.Builder) then
-            progressUnit = " work points"
-        end
-        text = text .. " <RGB:0.72,0.72,0.72> Current Activity: <RGB:1,1,1> " .. tostring(workProgressData.displayText or workProgressData.label or "Working") .. " <LINE> "
-        text = text .. " <RGB:0.72,0.72,0.72> Activity Progress: <RGB:1,1,1> "
-            .. formatReserveValue(workProgressData.progressAmount or workProgressData.progressHours or 0)
-            .. " / "
-            .. formatReserveValue(workProgressData.workTarget or workProgressData.cycleHours or 0)
-            .. progressUnit
-            .. " <LINE> "
-        text = text .. " <RGB:0.72,0.72,0.72> Activity ETA: <RGB:1,1,1> "
-            .. formatDurationHours(workProgressData.remainingWorldHours)
-            .. " <LINE> "
-    end
-
-    if normalizedJobType == (config.JobTypes and config.JobTypes.Scavenge) then
-        text = text .. " <LINE> <RGB:1,1,1> <SIZE:Medium> Scavenge Profile <LINE> "
-        text = text .. " <RGB:0.72,0.72,0.72> Tier: <RGB:1,1,1> " .. tostring(worker.scavengeTierLabel or "Tier 0 - Open Containers") .. " <LINE> "
-        text = text .. " <RGB:0.72,0.72,0.72> Site Profile: <RGB:1,1,1> " .. tostring(worker.scavengeSiteProfileLabel or "Unsorted Location") .. " <LINE> "
-        text = text .. " <RGB:0.72,0.72,0.72> Room Context: <RGB:1,1,1> " .. tostring(worker.scavengeSiteRoomName or "Unknown") .. " <LINE> "
-        text = text .. " <RGB:0.72,0.72,0.72> Zone Context: <RGB:1,1,1> " .. tostring(worker.scavengeSiteZoneType or "Unknown") .. " <LINE> "
-        text = text .. " <RGB:0.72,0.72,0.72> Loot Rolls: <RGB:1,1,1> " .. tostring(worker.scavengePoolRolls or 0) .. " <LINE> "
-        text = text .. " <RGB:0.72,0.72,0.72> Failure Weight: <RGB:1,1,1> " .. tostring(worker.scavengeFailureWeight or 0) .. " <LINE> "
-        text = text .. " <RGB:0.72,0.72,0.72> Gear Search Speed: <RGB:1,1,1> x" .. formatDecimal(worker.scavengeSearchSpeedMultiplier or 1, 2) .. " <LINE> "
-        if workProgressData and workProgressData.effectiveSpeedMultiplier then
-            text = text .. " <RGB:0.72,0.72,0.72> Speed Breakdown: <RGB:1,1,1> Base x"
-                .. formatDecimal(workProgressData.baseSpeedMultiplier or 1, 2)
-                .. " | Skill x"
-                .. formatDecimal(workProgressData.skillSpeedMultiplier or 1, 2)
-                .. " | Gear x"
-                .. formatDecimal(workProgressData.equipmentSpeedMultiplier or 1, 2)
-                .. " | Effective x"
-                .. formatDecimal(workProgressData.effectiveSpeedMultiplier or 1, 2)
-                .. " <LINE> "
-        end
-        text = text .. " <RGB:0.72,0.72,0.72> Carry Load (Raw): <RGB:1,1,1> "
-            .. formatDecimal(worker.haulRawWeight or 0, 2)
-            .. " / "
-            .. formatDecimal(worker.maxCarryWeight or 0, 2)
-            .. " <LINE> "
-        text = text .. " <RGB:0.72,0.72,0.72> Base Carry Limit: <RGB:1,1,1> " .. formatDecimal(worker.baseCarryWeight or worker.maxCarryWeight or 0, 2) .. " <LINE> "
-        text = text .. " <RGB:0.72,0.72,0.72> Effective Burden: <RGB:1,1,1> "
-            .. formatDecimal(worker.haulEffectiveWeight or 0, 2)
-            .. " / "
-            .. formatDecimal(worker.effectiveCarryLimit or worker.baseCarryWeight or 0, 2)
-            .. " <LINE> "
-        text = text .. " <RGB:0.72,0.72,0.72> Raw Carry Allowance: <RGB:1,1,1> " .. formatDecimal(worker.rawCarryAllowance or worker.maxCarryWeight or 0, 2) .. " <LINE> "
-        text = text .. " <RGB:0.72,0.72,0.72> Carry Containers: <RGB:1,1,1> " .. tostring(worker.carryContainerCount or 0) .. " <LINE> "
-        text = text .. " <RGB:0.72,0.72,0.72> Completed Runs: <RGB:1,1,1> " .. tostring(worker.dumpTrips or 0) .. " <LINE> "
-        text = text .. " <RGB:0.72,0.72,0.72> Warehouse Weight Used: <RGB:1,1,1> "
-            .. formatDecimal(worker.warehouseUsedWeight or 0, 2)
-            .. " / "
-            .. formatDecimal(worker.warehouseMaxWeight or 0, 2)
-            .. " <LINE> "
-        text = text .. " <RGB:0.72,0.72,0.72> Unlocked Pools: <RGB:1,1,1> " .. getScavengeCapabilitySummary(worker) .. " <LINE> "
-    end
-
-    self.detailText:setText(text)
-    MainWindowLayout.refreshRichTextPanel(self.detailText, shouldResetScroll and 0 or nil)
-    self.activityLogText:setText(buildActivityLogText(worker))
-    MainWindowLayout.refreshRichTextPanel(self.activityLogText, shouldResetScroll and 0 or nil)
-    if self.applyDynamicLayout then
-        self:applyDynamicLayout()
+    local activityText = buildActivityLogText(worker)
+    local detailChanged = updateRichTextPanel(self, self.detailText, "lastRenderedDetailText", text, shouldResetScroll)
+    local activityChanged = updateRichTextPanel(
+        self,
+        self.activityLogText,
+        "lastRenderedActivityLogText",
+        activityText,
+        shouldResetScroll
+    )
+    if self.applyDynamicLayout and (detailChanged or activityChanged or workerChanged) then
+        self:applyDynamicLayout({
+            refreshDetailText = false,
+            refreshActivityText = false,
+            refreshStatusText = false
+        })
     end
 
     if self.btnToggleJob then

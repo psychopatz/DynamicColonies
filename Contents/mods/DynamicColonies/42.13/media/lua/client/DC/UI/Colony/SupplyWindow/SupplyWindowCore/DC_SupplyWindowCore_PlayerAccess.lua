@@ -97,7 +97,7 @@ function Internal.resolveWorkerDetail(workerID)
         if Internal.Config and Internal.Config.GetOwnerUsername then
             owner = Internal.Config.GetOwnerUsername(player)
         end
-        return DC_Colony.Registry.GetWorkerDetailsForOwner(owner or "local", workerID)
+        return DC_Colony.Registry.GetWorkerDetailsForOwner(owner or "local", workerID, false, true)
     end
 
     return nil

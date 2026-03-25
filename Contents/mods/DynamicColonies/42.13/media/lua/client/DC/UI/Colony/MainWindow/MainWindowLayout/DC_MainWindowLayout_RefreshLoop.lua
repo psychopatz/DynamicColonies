@@ -22,7 +22,8 @@ local function autoRefreshWindow(window)
             if not supplyOwnsDetailSync then
                 window:sendColonyCommand("RequestWorkerDetails", {
                     workerID = window.selectedWorkerSummary.workerID,
-                    includeWarehouseLedgers = false
+                    includeWarehouseLedgers = false,
+                    includeWorkerLedgers = false
                 })
             end
         end

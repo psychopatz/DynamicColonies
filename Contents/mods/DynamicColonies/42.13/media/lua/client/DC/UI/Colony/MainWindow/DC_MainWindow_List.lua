@@ -18,6 +18,17 @@ local function formatWorkerListSubtitle(worker)
         .. tostring(worker and worker.presenceState or "Home")
 end
 
+local function getSelectedWorkerID(list)
+    local target = list and list.target or nil
+    if target and target.selectedWorkerSummary and target.selectedWorkerSummary.workerID then
+        return tostring(target.selectedWorkerSummary.workerID)
+    end
+    if target and target.selectedWorker and target.selectedWorker.workerID then
+        return tostring(target.selectedWorker.workerID)
+    end
+    return nil
+end
+
 function ColonyWorkerList:new(x, y, width, height)
     local o = ISScrollingListBox:new(x, y, width, height)
     setmetatable(o, self)
@@ -35,18 +46,22 @@ function ColonyWorkerList:doDrawItem(y, item, alt)
         return y + self.itemheight
     end
 
-    if item.selected then
-        self:drawRect(0, y, self.width, self.itemheight, 0.25, 0.18, 0.38, 0.62)
+    local selectedWorkerID = getSelectedWorkerID(self)
+    local isSelected = item.selected or (selectedWorkerID ~= nil and tostring(worker.workerID or "") == selectedWorkerID)
+
+    if isSelected then
+        self:drawRect(0, y, self.width, self.itemheight, 0.32, 0.22, 0.24, 0.28)
+        self:drawRect(0, y, 5, self.itemheight, 0.95, 0.82, 0.32, 0.16)
     elseif alt then
         self:drawRect(0, y, self.width, self.itemheight, 0.08, 1, 1, 1)
     else
         self:drawRect(0, y, self.width, self.itemheight, 0.08, 0, 0, 0)
     end
 
-    self:drawText(tostring(worker.name or worker.workerID), 10, y + 7, 0.88, 0.92, 1, 1, UIFont.Medium)
+    self:drawText(tostring(worker.name or worker.workerID), 12, y + 7, 0.88, 0.92, 1, 1, UIFont.Medium)
     self:drawText(
         formatWorkerListSubtitle(worker),
-        10,
+        12,
         y + 33,
         0.72,
         0.72,
@@ -54,7 +69,11 @@ function ColonyWorkerList:doDrawItem(y, item, alt)
         0.95,
         UIFont.Small
     )
-    self:drawRectBorder(0, y, self.width, self.itemheight, 0.08, 1, 1, 1)
+    if isSelected then
+        self:drawRectBorder(0, y, self.width, self.itemheight, 0.28, 0.98, 0.86, 0.4)
+    else
+        self:drawRectBorder(0, y, self.width, self.itemheight, 0.08, 1, 1, 1)
+    end
     return y + self.itemheight
 end
 
