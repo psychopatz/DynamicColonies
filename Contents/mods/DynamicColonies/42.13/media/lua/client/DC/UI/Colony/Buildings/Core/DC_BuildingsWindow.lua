@@ -1,6 +1,6 @@
 require "ISUI/ISCollapsableWindow"
 require "ISUI/ISButton"
-require "DC/Common/Buildings/DC_Buildings"
+require "DC/Common/Buildings/Core/DC_Buildings"
 require "DC/UI/Colony/Buildings/Models/DC_BuildingsClientState"
 require "DC/UI/Colony/Buildings/Models/DC_BuildingsClientSelectors"
 require "DC/UI/Colony/Buildings/Map/DC_BuildingsMapPanel"

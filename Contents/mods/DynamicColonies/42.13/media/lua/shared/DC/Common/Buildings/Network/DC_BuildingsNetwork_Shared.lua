@@ -1,4 +1,6 @@
-require "DC/Common/Buildings/DC_Buildings"
+require "DC/Common/Buildings/Core/DC_Buildings"
+require "DC/Common/Colony/ColonyConfig/DC_ColonyConfig"
+require "DC/Common/Colony/ColonyRegistry/DC_ColonyRegistry"
 
 DC_Colony = DC_Colony or {}
 DC_Colony.Network = DC_Colony.Network or {}
@@ -6,6 +8,7 @@ DC_Colony.Network.Internal = DC_Colony.Network.Internal or {}
 
 local ColonyConfig = DC_Colony.Config
 local Network = DC_Colony.Network
+local Registry = DC_Colony.Registry
 local Buildings = DC_Buildings
 local Config = Buildings.Config
 local Internal = Network.Internal
@@ -32,11 +35,6 @@ function Internal.canUseDebug(player)
 end
 
 function Internal.sendResponse(player, module, command, args)
-    if DC_Colony and DC_Colony.Network and DC_Colony.Network.Internal and DC_Colony.Network.Internal.sendResponse then
-        DC_Colony.Network.Internal.sendResponse(player, module, command, args)
-        return
-    end
-
     if DynamicTrading and DynamicTrading.ServerHelpers and DynamicTrading.ServerHelpers.SendResponse then
         DynamicTrading.ServerHelpers.SendResponse(player, module, command, args)
         return
@@ -73,17 +71,13 @@ function Internal.syncProjectPreview(player, ownerUsername, buildingType, mode, 
 end
 
 function Internal.syncWorkerList(player)
-    if DC_Colony and DC_Colony.Network and DC_Colony.Network.Internal and DC_Colony.Network.Internal.syncWorkerList then
-        DC_Colony.Network.Internal.syncWorkerList(player)
-    end
+    local owner = ColonyConfig.GetOwnerUsername(player)
+    Internal.sendResponse(player, ColonyConfig.COMMAND_MODULE, "SyncPlayerWorkers", {
+        workers = Registry.GetWorkerSummariesForOwner(owner)
+    })
 end
 
 function Internal.removeInventoryItem(item)
-    if DC_Colony and DC_Colony.Network and DC_Colony.Network.Internal and DC_Colony.Network.Internal.removeInventoryItem then
-        DC_Colony.Network.Internal.removeInventoryItem(item)
-        return
-    end
-
     if not item then
         return
     end
@@ -97,10 +91,6 @@ end
 function Internal.addInventoryItem(container, fullType, count)
     if not container or not fullType then
         return nil
-    end
-
-    if DC_Colony and DC_Colony.Network and DC_Colony.Network.Internal and DC_Colony.Network.Internal.addInventoryItem then
-        return DC_Colony.Network.Internal.addInventoryItem(container, fullType, count)
     end
 
     return container:AddItems(fullType, count or 1)

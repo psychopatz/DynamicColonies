@@ -1,4 +1,4 @@
-require "DC/Common/Buildings/DC_Buildings"
+require "DC/Common/Buildings/Core/DC_Buildings"
 require "DC/Common/Colony/ColonyConfig/DC_ColonyConfig"
 
 DC_Colony = DC_Colony or {}

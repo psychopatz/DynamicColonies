@@ -1,4 +1,4 @@
-require "DC/Common/Buildings/DC_Buildings"
+require "DC/Common/Buildings/Core/DC_Buildings"
 
 DC_Colony = DC_Colony or {}
 DC_Colony.Network = DC_Colony.Network or {}
