@@ -14,6 +14,10 @@ local function isRelevantEquipmentEntry(entry, window)
 
     local config = Internal.Config or {}
     local worker = window and window.workerData or nil
+    if worker and worker.jobType and Internal.getPlayerEntryEquipmentMatches then
+        return #(Internal.getPlayerEntryEquipmentMatches(entry, worker) or {}) > 0
+    end
+
     if config.GetMatchingEquipmentRequirementDefinitions and worker and worker.jobType then
         return #(config.GetMatchingEquipmentRequirementDefinitions(entry.fullType, worker.jobType) or {}) > 0
     end

@@ -3,6 +3,16 @@ DC_SupplyWindow.Internal = DC_SupplyWindow.Internal or {}
 
 local Internal = DC_SupplyWindow.Internal
 
+local function getLedgerWeight(entries)
+    local config = Internal.Config or {}
+    local totalWeight = 0
+    for _, entry in ipairs(entries or {}) do
+        local qty = math.max(1, tonumber(entry and entry.qty) or 1)
+        totalWeight = totalWeight + (math.max(0, tonumber(config.GetItemWeight and config.GetItemWeight(entry and entry.fullType)) or 0) * qty)
+    end
+    return totalWeight
+end
+
 function Internal.getWorkerSupplyTotals(entries)
     local totals = {
         count = 0,
@@ -35,31 +45,54 @@ function Internal.getEntryWeightTotal(entries)
     return totalWeight
 end
 
+function Internal.getWorkerInventoryWeightState(worker)
+    local hasNutritionLedger = worker and type(worker.nutritionLedger) == "table"
+    local hasToolLedger = worker and type(worker.toolLedger) == "table"
+    local hasOutputLedger = worker and type(worker.outputLedger) == "table"
+    local provisionsWeight = math.max(0, hasNutritionLedger and getLedgerWeight(worker.nutritionLedger) or tonumber(worker and worker.inventoryProvisionWeight) or 0)
+    local equipmentWeight = math.max(0, hasToolLedger and getLedgerWeight(worker.toolLedger) or tonumber(worker and worker.inventoryEquipmentWeight) or 0)
+    local outputWeight = math.max(0, hasOutputLedger and getLedgerWeight(worker.outputLedger) or tonumber(worker and worker.inventoryOutputWeight) or 0)
+    local usedWeight = math.max(0, (hasNutritionLedger or hasToolLedger or hasOutputLedger) and (provisionsWeight + equipmentWeight + outputWeight) or tonumber(worker and worker.inventoryUsedWeight) or (provisionsWeight + equipmentWeight + outputWeight))
+    local maxWeight = math.max(
+        0,
+        tonumber(worker and worker.inventoryMaxWeight)
+            or tonumber(worker and worker.maxCarryWeight)
+            or tonumber(worker and worker.baseCarryWeight)
+            or 0
+    )
+
+    return {
+        provisionsWeight = provisionsWeight,
+        equipmentWeight = equipmentWeight,
+        outputWeight = outputWeight,
+        usedWeight = usedWeight,
+        maxWeight = maxWeight,
+        remainingWeight = math.max(0, (hasNutritionLedger or hasToolLedger or hasOutputLedger) and math.max(0, maxWeight - usedWeight) or tonumber(worker and worker.inventoryRemainingWeight) or math.max(0, maxWeight - usedWeight)),
+    }
+end
+
+function Internal.getWorkerLedgerWeight(worker, tabID)
+    local state = Internal.getWorkerInventoryWeightState(worker)
+    if tabID == Internal.Tabs.Equipment then
+        return state.equipmentWeight
+    end
+    if tabID == Internal.Tabs.Output then
+        return state.outputWeight
+    end
+    return state.provisionsWeight
+end
+
 function Internal.getWarehouseLedgerWeight(worker, tabID)
     local warehouse = worker and worker.warehouse or nil
     local ledgers = warehouse and warehouse.ledgers or {}
-    local config = Internal.Config or {}
-    local totalWeight = 0
 
     if tabID == Internal.Tabs.Provisions then
-        for _, entry in ipairs(ledgers.provisions or {}) do
-            local qty = math.max(1, tonumber(entry and entry.qty) or 1)
-            totalWeight = totalWeight + (math.max(0, tonumber(config.GetItemWeight and config.GetItemWeight(entry and entry.fullType)) or 0) * qty)
-        end
-        return totalWeight
+        return getLedgerWeight(ledgers.provisions)
     end
 
     if tabID == Internal.Tabs.Equipment then
-        for _, entry in ipairs(ledgers.equipment or {}) do
-            local qty = math.max(1, tonumber(entry and entry.qty) or 1)
-            totalWeight = totalWeight + (math.max(0, tonumber(config.GetItemWeight and config.GetItemWeight(entry and entry.fullType)) or 0) * qty)
-        end
-        return totalWeight
+        return getLedgerWeight(ledgers.equipment)
     end
 
-    for _, entry in ipairs(ledgers.output or {}) do
-        local qty = math.max(1, tonumber(entry and entry.qty) or 1)
-        totalWeight = totalWeight + (math.max(0, tonumber(config.GetItemWeight and config.GetItemWeight(entry and entry.fullType)) or 0) * qty)
-    end
-    return totalWeight
+    return getLedgerWeight(ledgers.output)
 end

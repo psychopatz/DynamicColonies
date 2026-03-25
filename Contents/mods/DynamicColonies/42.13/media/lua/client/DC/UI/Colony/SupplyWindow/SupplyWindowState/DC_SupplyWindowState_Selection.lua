@@ -11,6 +11,8 @@ function DC_SupplyWindow:setActiveTab(tabID)
 
     self.activeTab = targetTab
     self.selectedWorkerEntry = nil
+    self.selectedPlayerEntry = nil
+    self.activeSelectionSide = targetTab == Internal.Tabs.Equipment and "worker" or nil
 
     if self.refreshTabButtons then
         self:refreshTabButtons()
@@ -49,4 +51,3 @@ function DC_SupplyWindow:refreshDetailSelection()
     self.activeSelectionSide = side
     self:updateItemDetail(entry, side)
 end
-

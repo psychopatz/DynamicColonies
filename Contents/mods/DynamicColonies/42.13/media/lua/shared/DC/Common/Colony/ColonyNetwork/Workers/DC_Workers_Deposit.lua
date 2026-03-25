@@ -37,15 +37,38 @@ Network.Handlers.DepositWorkerSupplies = function(player, args)
         itemIDs[#itemIDs + 1] = args.itemID
     end
 
+    local eligibleCount = 0
+    local movedCount = 0
+    local blockedCount = 0
     for _, itemID in ipairs(itemIDs) do
         local invItem = Internal.getInventoryItemByID(player, itemID)
         if invItem then
             local entry = Nutrition.BuildEntryFromItem(invItem)
             if entry then
-                Registry.AddNutritionEntry(worker, entry)
-                Internal.removeInventoryItem(invItem)
+                eligibleCount = eligibleCount + 1
+                if Registry.AddNutritionEntry(worker, entry) then
+                    Internal.removeInventoryItem(invItem)
+                    movedCount = movedCount + 1
+                else
+                    blockedCount = blockedCount + 1
+                end
             end
         end
+    end
+
+    if movedCount <= 0 and eligibleCount > 0 then
+        Internal.syncNotice(player, "NPC inventory is full. No provisions could be deposited.", "error", true)
+        Shared.saveAndRefreshBasic(player, worker)
+        return
+    end
+
+    if blockedCount > 0 then
+        Internal.syncNotice(
+            player,
+            "NPC inventory is nearly full. " .. tostring(blockedCount) .. " provision item" .. (blockedCount == 1 and "" or "s") .. " could not be stored.",
+            "error",
+            true
+        )
     end
 
     Shared.saveAndRefreshProcessed(player, worker)

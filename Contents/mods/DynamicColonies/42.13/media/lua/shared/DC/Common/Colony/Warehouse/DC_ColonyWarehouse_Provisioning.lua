@@ -100,10 +100,17 @@ local function restockRequiredTools(worker)
     for _, definition in ipairs(requirementDefinitions) do
         local requirementTags = definition.requirementTags or { definition.requirementKey }
         if not workerHasAnyRequirementTag(worker, requirementTags) then
+            if Registry.GetInventoryRemainingCapacity(worker) <= 0 then
+                break
+            end
             local entry = takeFirstEquipmentEntryByRequirementTags(worker.ownerUsername, requirementTags)
             if entry then
-                Registry.AddToolEntry(worker, entry)
-                added = added + 1
+                if Registry.AddToolEntry(worker, entry) then
+                    added = added + 1
+                else
+                    Warehouse.DepositEquipmentEntry(worker.ownerUsername, entry)
+                    break
+                end
             end
         end
     end
@@ -163,6 +170,9 @@ local function restockProvisions(worker, dailyCaloriesNeed, dailyHydrationNeed)
     local safetyCounter = 0
 
     while safetyCounter < 512 and (totalCalories < targetCalories or totalHydration < targetHydration) do
+        if Registry.GetInventoryRemainingCapacity(worker) <= 0 then
+            break
+        end
         local index = findBestProvisionIndex(
             warehouse,
             math.max(0, targetCalories - totalCalories),
@@ -184,7 +194,10 @@ local function restockProvisions(worker, dailyCaloriesNeed, dailyHydrationNeed)
             table.remove(warehouse.ledgers.provisions, index)
         end
 
-        Registry.AddNutritionEntry(worker, removed)
+        if not Registry.AddNutritionEntry(worker, removed) then
+            Warehouse.DepositProvisionEntry(worker.ownerUsername, removed)
+            break
+        end
         movedCalories = movedCalories + math.max(0, tonumber(removed.caloriesRemaining) or 0)
         movedHydration = movedHydration + math.max(0, tonumber(removed.hydrationRemaining) or 0)
         movedCount = movedCount + 1

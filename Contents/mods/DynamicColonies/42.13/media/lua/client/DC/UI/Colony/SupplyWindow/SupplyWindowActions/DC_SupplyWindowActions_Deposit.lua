@@ -40,6 +40,54 @@ local function takeEntrySubset(entries, quantity)
     return result
 end
 
+local function getEntryTransferWeight(entry)
+    return math.max(0, tonumber(entry and entry.totalWeight) or tonumber(entry and entry.unitWeight) or 0)
+end
+
+local function getRemainingTransferCapacity(window)
+    if Internal.isWarehouseView and Internal.isWarehouseView(window) then
+        local warehouse = window and window.workerData and window.workerData.warehouse or nil
+        if not warehouse then
+            return nil
+        end
+        local maxWeight = math.max(0, tonumber(warehouse.maxWeight) or 0)
+        local usedWeight = math.max(0, tonumber(warehouse.usedWeight) or 0)
+        return math.max(0, tonumber(warehouse.remainingWeight) or math.max(0, maxWeight - usedWeight))
+    end
+
+    if Internal.getWorkerInventoryWeightState then
+        local state = Internal.getWorkerInventoryWeightState(window and window.workerData)
+        if state and tonumber(state.maxWeight) then
+            return math.max(0, tonumber(state.remainingWeight) or 0)
+        end
+    end
+
+    return nil
+end
+
+local function selectEntriesThatFit(window, entries)
+    local remainingCapacity = getRemainingTransferCapacity(window)
+    if remainingCapacity == nil then
+        return entries or {}, 0
+    end
+
+    local fittingEntries = {}
+    local blockedCount = 0
+    for _, entry in ipairs(entries or {}) do
+        local weight = getEntryTransferWeight(entry)
+        if weight <= 0 or weight <= (remainingCapacity + 0.0001) then
+            fittingEntries[#fittingEntries + 1] = entry
+            if weight > 0 then
+                remainingCapacity = math.max(0, remainingCapacity - weight)
+            end
+        else
+            blockedCount = blockedCount + 1
+        end
+    end
+
+    return fittingEntries, blockedCount
+end
+
 function DC_SupplyWindow:openGroupedDepositQuantityModal(selectedEntry, concreteEntries)
     local available = #(concreteEntries or {})
     if available <= 1 then
@@ -110,6 +158,21 @@ function DC_SupplyWindow:depositEntries(entries)
         return
     end
 
+    local fittingEntries, blockedCount = selectEntriesThatFit(self, selectedEntries)
+    if #fittingEntries <= 0 then
+        if activeTab == Internal.Tabs.Output then
+            self:updateStatus("No selected storage items fit in the remaining capacity.")
+        else
+            self:updateStatus("No selected provisions fit in the remaining capacity.")
+        end
+        return
+    end
+
+    payload = {}
+    for _, entry in ipairs(fittingEntries) do
+        payload[#payload + 1] = entry.itemID
+    end
+
     local command = activeTab == Internal.Tabs.Output and getOutputDepositCommand(self) or getSupplyDepositCommand(self)
     if not command or not self:sendColonyCommand(command, {
             workerID = self.workerID,
@@ -119,22 +182,37 @@ function DC_SupplyWindow:depositEntries(entries)
         return
     end
 
-    self:applyOptimisticDeposit(selectedEntries)
+    self:applyOptimisticDeposit(fittingEntries)
 
-    if #selectedEntries == 1 then
-        local entry = selectedEntries[1]
+    if #fittingEntries == 1 then
+        local entry = fittingEntries[1]
         if activeTab == Internal.Tabs.Output then
-            self:updateStatus("Storing " .. tostring(entry.displayName or entry.fullType or "selected item") .. " in warehouse storage...")
+            local statusText = "Storing " .. tostring(entry.displayName or entry.fullType or "selected item") .. " in warehouse storage..."
+            if blockedCount > 0 then
+                statusText = statusText .. " " .. tostring(blockedCount) .. " did not fit."
+            end
+            self:updateStatus(statusText)
         else
-            self:updateStatus(
+            local statusText =
                 "Depositing " .. tostring(entry.displayName or entry.fullType or "selected item") .. " into " .. getDepositTargetLabel(self) .. "..."
-            )
+            if blockedCount > 0 then
+                statusText = statusText .. " " .. tostring(blockedCount) .. " did not fit."
+            end
+            self:updateStatus(statusText)
         end
     else
         if activeTab == Internal.Tabs.Output then
-            self:updateStatus("Storing " .. tostring(#selectedEntries) .. " visible items in warehouse storage...")
+            local statusText = "Storing " .. tostring(#fittingEntries) .. " visible items in warehouse storage..."
+            if blockedCount > 0 then
+                statusText = statusText .. " " .. tostring(blockedCount) .. " did not fit."
+            end
+            self:updateStatus(statusText)
         else
-            self:updateStatus("Depositing " .. tostring(#selectedEntries) .. " visible supplies into " .. getDepositTargetLabel(self) .. "...")
+            local statusText = "Depositing " .. tostring(#fittingEntries) .. " visible supplies into " .. getDepositTargetLabel(self) .. "..."
+            if blockedCount > 0 then
+                statusText = statusText .. " " .. tostring(blockedCount) .. " did not fit."
+            end
+            self:updateStatus(statusText)
         end
     end
 end
@@ -164,8 +242,14 @@ function DC_SupplyWindow:assignToolEntries(entries)
         return
     end
 
+    local fittingEntries, blockedCount = selectEntriesThatFit(self, selectedEntries)
+    if #fittingEntries <= 0 then
+        self:updateStatus("No selected labour tools fit in the remaining capacity.")
+        return
+    end
+
     local sentEntries = {}
-    for _, entry in ipairs(selectedEntries) do
+    for _, entry in ipairs(fittingEntries) do
         if self:sendColonyCommand(getEquipmentDepositCommand(self), {
                 workerID = self.workerID,
                 itemID = entry.itemID
@@ -182,11 +266,18 @@ function DC_SupplyWindow:assignToolEntries(entries)
     self:applyOptimisticToolAssign(sentEntries)
 
     if #sentEntries == 1 then
-        self:updateStatus(
+        local statusText =
             "Assigning " .. tostring(sentEntries[1].displayName or sentEntries[1].fullType or "selected tool") .. " to " .. getDepositTargetLabel(self) .. "..."
-        )
+        if blockedCount > 0 then
+            statusText = statusText .. " " .. tostring(blockedCount) .. " did not fit."
+        end
+        self:updateStatus(statusText)
     else
-        self:updateStatus("Assigning " .. tostring(#sentEntries) .. " tools to " .. getDepositTargetLabel(self) .. "...")
+        local statusText = "Assigning " .. tostring(#sentEntries) .. " tools to " .. getDepositTargetLabel(self) .. "..."
+        if blockedCount > 0 then
+            statusText = statusText .. " " .. tostring(blockedCount) .. " did not fit."
+        end
+        self:updateStatus(statusText)
     end
 end
 

@@ -68,6 +68,30 @@ function Internal.ensurePlayerEntryEquipmentData(entry)
     return entry
 end
 
+function Internal.getPlayerEntryEquipmentMatches(entry, worker)
+    if not entry or entry.kind ~= "player" then
+        return {}
+    end
+
+    Internal.ensurePlayerEntryEquipmentData(entry)
+
+    local config = Internal.Config or {}
+    local normalizeJobType = config.NormalizeJobType
+    local normalizedJob = normalizeJobType and normalizeJobType(worker and worker.jobType) or tostring(worker and worker.jobType or "")
+    local cacheKey = normalizedJob ~= "" and normalizedJob or "__all"
+
+    entry.jobEquipmentMatches = entry.jobEquipmentMatches or {}
+    if entry.jobEquipmentMatches[cacheKey] ~= nil then
+        return entry.jobEquipmentMatches[cacheKey]
+    end
+
+    local matches = config.GetMatchingEquipmentRequirementDefinitions
+        and config.GetMatchingEquipmentRequirementDefinitions(entry.fullType, normalizedJob ~= "__all" and normalizedJob or nil)
+        or {}
+    entry.jobEquipmentMatches[cacheKey] = matches
+    return matches
+end
+
 function Internal.getCachedNutritionPreview(invItem)
     if not invItem then
         return 0, 0

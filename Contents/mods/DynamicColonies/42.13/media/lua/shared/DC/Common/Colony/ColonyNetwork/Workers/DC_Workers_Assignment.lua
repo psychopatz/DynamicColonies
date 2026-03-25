@@ -40,11 +40,16 @@ Network.Handlers.AssignWorkerToolset = function(player, args)
     local isRequiredEquipment = Config.IsRequiredEquipmentFullType and Config.IsRequiredEquipmentFullType(fullType, worker.jobType)
     if not isRequiredEquipment then return end
 
-    Registry.AddToolEntry(worker, {
+    local stored = Registry.AddToolEntry(worker, {
         fullType = fullType,
         displayName = invItem:getDisplayName(),
         tags = tags
     })
+    if not stored then
+        Internal.syncNotice(player, "NPC inventory is full. No space for that equipment.", "error", true)
+        Shared.saveAndRefreshBasic(player, worker)
+        return
+    end
     Internal.removeInventoryItem(invItem)
 
     Shared.saveAndRefreshProcessed(player, worker)

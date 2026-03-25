@@ -55,6 +55,15 @@ local function getLedgerTotals(worker)
     return calories, hydration
 end
 
+local function getInventoryLedgerWeight(entries)
+    local totalWeight = 0
+    for _, entry in ipairs(entries or {}) do
+        local qty = math.max(1, tonumber(entry and entry.qty) or 1)
+        totalWeight = totalWeight + (math.max(0, tonumber(Config.GetItemWeight and Config.GetItemWeight(entry and entry.fullType)) or 0) * qty)
+    end
+    return totalWeight
+end
+
 local function migrateLegacyNutritionModel(worker)
     local currentVersion = tonumber(worker and worker.nutritionModelVersion) or 0
     local targetVersion = tonumber(Config.NUTRITION_MODEL_VERSION) or 3
@@ -238,6 +247,12 @@ function Registry.RecalculateWorker(worker)
     worker.maxCarryWeight = carryProfile and carryProfile.maxCarryWeight or worker.baseCarryWeight
     worker.rawCarryAllowance = carryProfile and carryProfile.rawAllowance or worker.maxCarryWeight
     worker.carryContainerCount = #(carryProfile and carryProfile.containers or {})
+    worker.inventoryProvisionWeight = getInventoryLedgerWeight(worker.nutritionLedger)
+    worker.inventoryEquipmentWeight = getInventoryLedgerWeight(worker.toolLedger)
+    worker.inventoryOutputWeight = getInventoryLedgerWeight(worker.outputLedger)
+    worker.inventoryUsedWeight = worker.inventoryProvisionWeight + worker.inventoryEquipmentWeight + worker.inventoryOutputWeight
+    worker.inventoryMaxWeight = math.max(0, tonumber(worker.maxCarryWeight) or tonumber(worker.baseCarryWeight) or 0)
+    worker.inventoryRemainingWeight = math.max(0, worker.inventoryMaxWeight - worker.inventoryUsedWeight)
     worker.dumpCooldownHours = math.max(0, tonumber(worker.dumpCooldownHours) or 0)
     worker.dumpTrips = math.max(0, tonumber(worker.dumpTrips) or 0)
     worker.assignedToolTags = tags

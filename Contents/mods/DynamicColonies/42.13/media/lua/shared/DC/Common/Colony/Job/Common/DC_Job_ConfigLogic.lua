@@ -2,6 +2,7 @@ DC_Colony = DC_Colony or {}
 DC_Colony.Config = DC_Colony.Config or {}
 
 local Config = DC_Colony.Config
+Config.__equipmentRequirementCache = Config.__equipmentRequirementCache or {}
 
 local function appendUniqueStrings(target, values)
     target = type(target) == "table" and target or {}
@@ -27,6 +28,17 @@ end
 
 local function cloneStringArray(values)
     return appendUniqueStrings({}, values)
+end
+
+local function getEquipmentRequirementCache()
+    local cache = Config.__equipmentRequirementCache or {}
+    cache.definitionByKey = cache.definitionByKey or {}
+    cache.definitionsByJob = cache.definitionsByJob or {}
+    cache.autoEquipByJob = cache.autoEquipByJob or {}
+    cache.matchesByJobAndType = cache.matchesByJobAndType or {}
+    cache.knownEquipmentFullTypes = cache.knownEquipmentFullTypes or nil
+    Config.__equipmentRequirementCache = cache
+    return cache
 end
 
 Config.EquipmentRequirementDefinitions = Config.EquipmentRequirementDefinitions or {
@@ -261,6 +273,11 @@ local function isDefinitionRelevantToJob(definition, normalizedJobType)
 end
 
 local function collectKnownEquipmentFullTypes()
+    local cache = getEquipmentRequirementCache()
+    if cache.knownEquipmentFullTypes then
+        return cache.knownEquipmentFullTypes
+    end
+
     local fullTypes = {}
 
     for _, definition in pairs(Config.EquipmentRequirementDefinitions or {}) do
@@ -279,6 +296,7 @@ local function collectKnownEquipmentFullTypes()
         appendUniqueStrings(fullTypes, { fullType })
     end
 
+    cache.knownEquipmentFullTypes = fullTypes
     return fullTypes
 end
 
@@ -341,6 +359,11 @@ function Config.GetEquipmentRequirementDefinition(requirementKey)
         return nil
     end
 
+    local cache = getEquipmentRequirementCache()
+    if cache.definitionByKey[key] then
+        return cache.definitionByKey[key]
+    end
+
     local source = Config.EquipmentRequirementDefinitions[key] or {}
     local definition = {
         requirementKey = key,
@@ -367,11 +390,18 @@ function Config.GetEquipmentRequirementDefinition(requirementKey)
         end
     end
 
+    cache.definitionByKey[key] = definition
     return definition
 end
 
 function Config.GetEquipmentRequirementDefinitions(jobType)
     local normalizedJobType = jobType and Config.NormalizeJobType(jobType) or nil
+    local cacheKey = normalizedJobType or "__all"
+    local cache = getEquipmentRequirementCache()
+    if cache.definitionsByJob[cacheKey] then
+        return cache.definitionsByJob[cacheKey]
+    end
+
     local definitions = {}
     local seen = {}
     local profile = normalizedJobType and Config.GetJobProfile(normalizedJobType) or nil
@@ -408,29 +438,53 @@ function Config.GetEquipmentRequirementDefinitions(jobType)
         return orderA < orderB
     end)
 
+    cache.definitionsByJob[cacheKey] = definitions
     return definitions
 end
 
 function Config.GetAutoEquipRequirementDefinitions(jobType)
+    local normalizedJobType = jobType and Config.NormalizeJobType(jobType) or nil
+    local cacheKey = normalizedJobType or "__all"
+    local cache = getEquipmentRequirementCache()
+    if cache.autoEquipByJob[cacheKey] then
+        return cache.autoEquipByJob[cacheKey]
+    end
+
     local definitions = {}
     for _, definition in ipairs(Config.GetEquipmentRequirementDefinitions(jobType)) do
         if definition.autoEquip == true then
             definitions[#definitions + 1] = definition
         end
     end
+
+    cache.autoEquipByJob[cacheKey] = definitions
     return definitions
 end
 
 function Config.GetMatchingEquipmentRequirementDefinitions(fullType, jobType)
+    local itemType = tostring(fullType or "")
+    if itemType == "" then
+        return {}
+    end
+
+    local normalizedJobType = jobType and Config.NormalizeJobType(jobType) or nil
+    local cacheKey = (normalizedJobType or "__all") .. "|" .. itemType
+    local cache = getEquipmentRequirementCache()
+    if cache.matchesByJobAndType[cacheKey] then
+        return cache.matchesByJobAndType[cacheKey]
+    end
+
     local matches = {}
-    for _, definition in ipairs(Config.GetEquipmentRequirementDefinitions(jobType)) do
+    for _, definition in ipairs(Config.GetEquipmentRequirementDefinitions(normalizedJobType)) do
         for _, requirementTag in ipairs(definition.requirementTags or {}) do
-            if Config.ItemMatchesEquipmentRequirement(fullType, requirementTag) then
+            if Config.ItemMatchesEquipmentRequirement(itemType, requirementTag) then
                 matches[#matches + 1] = definition
                 break
             end
         end
     end
+
+    cache.matchesByJobAndType[cacheKey] = matches
     return matches
 end
 

@@ -64,6 +64,10 @@ function Internal.getEntrySelectionKey(entry)
         return "group:" .. tostring(entry.groupKey or "")
     end
 
+    if entry.kind == "placeholder" then
+        return "placeholder:" .. tostring(entry.requirementKey or entry.ledgerIndex or entry.displayName or entry.fullType or "")
+    end
+
     return tostring(entry.itemID or entry.ledgerIndex or entry.fullType or entry.displayName or "")
 end
 

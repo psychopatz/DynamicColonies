@@ -54,6 +54,9 @@ function Internal.getWorkerHeaderTitle(window)
     local activeTab = window and window.activeTab or Internal.Tabs.Provisions
     local worker = window and window.workerData or nil
     local config = Internal.Config or {}
+    local inventoryState = Internal.getWorkerInventoryWeightState and Internal.getWorkerInventoryWeightState(worker) or nil
+    local inventoryWeight = Internal.formatWeightValue(inventoryState and inventoryState.usedWeight)
+    local inventoryCapacity = Internal.formatWeightValue(inventoryState and inventoryState.maxWeight)
 
     if activeTab == Internal.Tabs.Output then
         local normalizedJob = config.NormalizeJobType and config.NormalizeJobType(worker and worker.jobType) or tostring(worker and worker.jobType or "")
@@ -63,7 +66,11 @@ function Internal.getWorkerHeaderTitle(window)
         if normalizedJob ~= ((config.JobTypes or {}).Scavenge) then
             local storedWeight = Internal.formatWeightValue(worker and worker.outputWeight)
             return workerName
-                .. " (Stored "
+                .. " (Inv "
+                .. inventoryWeight
+                .. " / "
+                .. inventoryCapacity
+                .. " | Stored "
                 .. storedWeight
                 .. " | Carry "
                 .. carryWeight
@@ -73,14 +80,18 @@ function Internal.getWorkerHeaderTitle(window)
         end
 
         return workerName
-            .. " (Carry "
+            .. " (Inv "
+            .. inventoryWeight
+            .. " / "
+            .. inventoryCapacity
+            .. " | Carry "
             .. carryWeight
             .. " / "
             .. carryCapacity
             .. ") Inventory"
     end
 
-    return workerName .. " Inventory"
+    return workerName .. " Inventory (" .. inventoryWeight .. " / " .. inventoryCapacity .. ")"
 end
 
 function Internal.getTabButtonTitle(window, tabID)
@@ -91,13 +102,16 @@ function Internal.getTabButtonTitle(window, tabID)
         baseTitle = "Equipment"
     end
 
-    if not (Internal.isWarehouseView and Internal.isWarehouseView(window)) then
-        return baseTitle
-    end
-
-    if tabID == Internal.Tabs.Provisions then
+    if tabID == Internal.Tabs.Provisions and Internal.isWarehouseView and Internal.isWarehouseView(window) then
         baseTitle = "Provision"
     end
 
-    return baseTitle .. " W" .. Internal.formatWeightValue(Internal.getWarehouseLedgerWeight(window and window.workerData, tabID))
+    local weightValue = 0
+    if Internal.isWarehouseView and Internal.isWarehouseView(window) then
+        weightValue = Internal.getWarehouseLedgerWeight(window and window.workerData, tabID)
+    else
+        weightValue = Internal.getWorkerLedgerWeight and Internal.getWorkerLedgerWeight(window and window.workerData, tabID) or 0
+    end
+
+    return baseTitle .. " W" .. Internal.formatWeightValue(weightValue)
 end
