@@ -1,6 +1,23 @@
 local System = DC_System
 local Internal = System.Internal
 
+local function dispatchLocalCommand(player, module, command, args)
+    if module == Internal.GetCommandModule()
+        and DC_Colony
+        and DC_Colony.Network
+        and DC_Colony.Network.HandleCommand then
+        DC_Colony.Network.HandleCommand(player, command, args or {})
+        return true
+    end
+
+    if triggerEvent then
+        triggerEvent("OnClientCommand", module, command, player, args or {})
+        return true
+    end
+
+    return false
+end
+
 function System.CanUseDebug(player)
     local playerObj = player or Internal.GetLocalPlayer()
 
@@ -37,25 +54,25 @@ function System.OpenWindow()
 end
 
 function System.SendCommand(command, args)
+    return System.SendCommandToModule(Internal.GetCommandModule(), command, args)
+end
+
+function System.SendFactionCommand(command, args)
+    return System.SendCommandToModule(Internal.GetFactionCommandModule(), command, args)
+end
+
+function System.SendCommandToModule(module, command, args)
     local player = Internal.GetLocalPlayer()
     if not player then
         return false
     end
 
+    module = module or Internal.GetCommandModule()
+
     if isClient() and not isServer() then
-        sendClientCommand(player, Internal.GetCommandModule(), command, args or {})
+        sendClientCommand(player, module, command, args or {})
         return true
     end
 
-    if triggerEvent and isServer and isServer() and not (isClient and isClient()) then
-        triggerEvent("OnClientCommand", Internal.GetCommandModule(), command, player, args or {})
-        return true
-    end
-
-    if DC_Colony and DC_Colony.Network and DC_Colony.Network.HandleCommand then
-        DC_Colony.Network.HandleCommand(player, command, args or {})
-        return true
-    end
-
-    return false
+    return dispatchLocalCommand(player, module, command, args)
 end

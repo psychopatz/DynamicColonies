@@ -23,7 +23,7 @@ function System.GetOwnedFactionStatus()
 end
 
 function System.RequestOwnedFactionStatus()
-    return System.SendCommand("RequestOwnedFactionStatus", {})
+    return System.SendFactionCommand("RequestOwnedFactionStatus", {})
 end
 
 function System.OpenOwnedFactionManagement()
@@ -66,7 +66,7 @@ function System.PromptCreateFaction()
                 end
                 return
             end
-            System.SendCommand("CreatePlayerFaction", {
+            System.SendFactionCommand("CreatePlayerFaction", {
                 name = name
             })
         end

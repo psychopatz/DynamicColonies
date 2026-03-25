@@ -2,7 +2,9 @@ local System = DC_System
 local Internal = System.Internal
 
 local function onServerCommand(module, command, args)
-    if module ~= Internal.GetCommandModule() then
+    local isFactionCommand = command == "SyncOwnedFactionStatus" or command == "OwnedFactionActionResult"
+    if module ~= Internal.GetCommandModule()
+        and not (isFactionCommand and module == Internal.GetFactionCommandModule()) then
         return
     end
 

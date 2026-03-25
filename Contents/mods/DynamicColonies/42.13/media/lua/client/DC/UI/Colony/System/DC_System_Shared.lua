@@ -22,6 +22,10 @@ function Internal.GetCommandModule()
     return "DColony"
 end
 
+function Internal.GetFactionCommandModule()
+    return "DynamicTrading_V2"
+end
+
 function Internal.GetLocalPlayer()
     if getSpecificPlayer then
         return getSpecificPlayer(0)

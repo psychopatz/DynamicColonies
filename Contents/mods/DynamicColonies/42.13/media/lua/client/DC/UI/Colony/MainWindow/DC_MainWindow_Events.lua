@@ -103,7 +103,10 @@ DC_MainWindow.MergeWorkerDetail = mergeWorkerDetail
 
 local function onServerCommand(module, command, args)
     local expectedModule = ((DC_Colony and DC_Colony.Config and DC_Colony.Config.COMMAND_MODULE) or "DColony")
-    if module ~= expectedModule then
+    local isFactionCommand = command == "SyncOwnedFactionStatus" or command == "OwnedFactionActionResult"
+    if module ~= expectedModule
+        and not (isFactionCommand and DC_System and DC_System.Internal and DC_System.Internal.GetFactionCommandModule
+            and module == DC_System.Internal.GetFactionCommandModule()) then
         return
     end
 
