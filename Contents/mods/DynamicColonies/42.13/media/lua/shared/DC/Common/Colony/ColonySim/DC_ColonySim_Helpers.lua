@@ -18,7 +18,20 @@ Internal.hasWarehouseCapacityForScavenge = function(worker)
 end
 
 Internal.isAutoRepeatEnabled = function(worker)
-    return worker and (worker.autoRepeatJob == true or worker.autoRepeatScavenge == true)
+    if not worker then
+        return false
+    end
+
+    local normalizedJob = Config.NormalizeJobType and Config.NormalizeJobType(worker.jobType) or tostring(worker.jobType or "")
+    if normalizedJob == tostring((Config.JobTypes or {}).Unemployed or "Unemployed") then
+        return false
+    end
+
+    if worker.jobEnabled == true then
+        return true
+    end
+
+    return worker.autoRepeatJob == true or worker.autoRepeatScavenge == true
 end
 
 

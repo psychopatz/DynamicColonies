@@ -158,7 +158,7 @@ function DC_MainWindow:updateWorkerDetail(worker)
             end
         end
         if self.btnAutoRepeat then
-            self.btnAutoRepeat:setTitle("Auto Repeat: Off")
+            self.btnAutoRepeat:setTitle("Work Mode: Continuous")
             self.btnAutoRepeat:setEnable(false)
         end
         if self.btnCycleJob then
@@ -182,6 +182,7 @@ function DC_MainWindow:updateWorkerDetail(worker)
     local normalizedJobType = isFunction(config.NormalizeJobType) and config.NormalizeJobType(worker.jobType) or worker.jobType
     local stateLabel = tostring(worker.state or "")
     local deadState = tostring((config.States or {}).Dead or "Dead")
+    local unemployedJob = tostring((config.JobTypes or {}).Unemployed or "Unemployed")
     local text = ""
     text = text .. " <RGB:1,1,1> <SIZE:Medium> Worker Status <LINE> "
     text = text .. " <RGB:0.72,0.72,0.72> Tool State: <RGB:1,1,1> " .. tostring(worker.toolState or "Missing") .. " <LINE> "
@@ -237,6 +238,11 @@ function DC_MainWindow:updateWorkerDetail(worker)
             if MainWindowLayout.applyToggleButtonStyle then
                 MainWindowLayout.applyToggleButtonStyle(self.btnToggleJob, worker.jobEnabled == true)
             end
+        elseif normalizedJobType == unemployedJob then
+            self.btnToggleJob:setTitle("Assign Job")
+            if MainWindowLayout.applyToggleButtonStyle then
+                MainWindowLayout.applyToggleButtonStyle(self.btnToggleJob, false)
+            end
         else
             self.btnToggleJob:setTitle(worker.jobEnabled and "Stop Job" or "Start Job")
             if MainWindowLayout.applyToggleButtonStyle then
@@ -246,9 +252,8 @@ function DC_MainWindow:updateWorkerDetail(worker)
     end
 
     if self.btnAutoRepeat then
-        local allowAutoRepeat = stateLabel ~= deadState and normalizedJobType == (config.JobTypes and config.JobTypes.Scavenge)
-        self.btnAutoRepeat:setTitle("Auto Repeat: " .. ((((worker.autoRepeatJob == true) or (worker.autoRepeatScavenge == true)) and "On") or "Off"))
-        self.btnAutoRepeat:setEnable(allowAutoRepeat)
+        self.btnAutoRepeat:setTitle("Work Mode: Continuous")
+        self.btnAutoRepeat:setEnable(false)
     end
 
     if self.btnCycleJob then

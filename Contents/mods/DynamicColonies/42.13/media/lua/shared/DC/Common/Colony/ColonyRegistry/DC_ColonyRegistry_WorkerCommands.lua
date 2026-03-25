@@ -44,10 +44,18 @@ end
 function Registry.SetWorkerJobEnabled(worker, enabled)
     if worker then
         local shouldEnable = enabled == true
+        local normalizedJob = Config.NormalizeJobType(worker.jobType)
         if shouldEnable then
+            if normalizedJob == Config.JobTypes.Unemployed then
+                worker.jobEnabled = false
+                worker.state = Config.States.Idle
+                return
+            end
             worker.jobEnabled = true
+            worker.autoRepeatJob = true
+            worker.autoRepeatScavenge = normalizedJob == Config.JobTypes.Scavenge
             worker.returnReason = nil
-            if Config.NormalizeJobType(worker.jobType) == Config.JobTypes.Scavenge
+            if normalizedJob == Config.JobTypes.Scavenge
                 and (worker.presenceState == nil or worker.presenceState == Config.PresenceStates.Home) then
                 worker.travelHoursRemaining = 0
             end
@@ -63,17 +71,36 @@ function Registry.SetWorkerAutoRepeatScavenge(worker, enabled)
         return
     end
 
-    worker.autoRepeatJob = enabled == true
-    worker.autoRepeatScavenge = enabled == true
+    local normalizedJob = Config.NormalizeJobType(worker.jobType)
+    if normalizedJob == Config.JobTypes.Unemployed then
+        worker.autoRepeatJob = false
+        worker.autoRepeatScavenge = false
+        return
+    end
+
+    worker.autoRepeatJob = true
+    worker.autoRepeatScavenge = normalizedJob == Config.JobTypes.Scavenge
 end
 
 function Registry.SetWorkerJobType(worker, jobType)
     if not worker then return end
-    worker.jobType = Config.NormalizeJobType(jobType)
+    local normalizedJob = Config.NormalizeJobType(jobType)
+    worker.jobType = normalizedJob
     worker.profession = worker.jobType
     worker.workProgress = 0
     worker.workTarget = nil
+    worker.workCycleHours = nil
     worker.returnReason = nil
+    if normalizedJob == Config.JobTypes.Unemployed then
+        worker.jobEnabled = false
+        worker.autoRepeatJob = false
+        worker.autoRepeatScavenge = false
+        worker.state = Config.States.Idle
+    else
+        worker.jobEnabled = true
+        worker.autoRepeatJob = true
+        worker.autoRepeatScavenge = normalizedJob == Config.JobTypes.Scavenge
+    end
     if worker.presenceState == nil then
         worker.presenceState = Config.PresenceStates.Home
     end

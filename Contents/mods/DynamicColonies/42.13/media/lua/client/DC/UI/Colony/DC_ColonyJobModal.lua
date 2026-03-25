@@ -7,7 +7,46 @@ require "DC/Common/Colony/ColonyConfig/DC_ColonyConfig"
 DC_ColonyJobModal = ISCollapsableWindow:derive("DC_ColonyJobModal")
 DC_ColonyJobModal.instance = nil
 
-local function buildOrderedJobOptions(config)
+local function getJobDisplayColor(config, jobType)
+    local normalized = config.NormalizeJobType and config.NormalizeJobType(jobType) or tostring(jobType or "")
+    local jobTypes = config.JobTypes or {}
+
+    if normalized == tostring(jobTypes.Builder or "Builder") then
+        return { r = 0.48, g = 0.9, b = 0.48, a = 1 }
+    end
+    if normalized == tostring(jobTypes.Scavenge or "Scavenge") then
+        return { r = 0.95, g = 0.78, b = 0.36, a = 1 }
+    end
+    if normalized == tostring(jobTypes.Farm or "Farm") then
+        return { r = 0.62, g = 0.88, b = 0.42, a = 1 }
+    end
+    if normalized == tostring(jobTypes.Fish or "Fish") then
+        return { r = 0.48, g = 0.78, b = 0.98, a = 1 }
+    end
+    if normalized == tostring(jobTypes.Doctor or "Doctor") then
+        return { r = 0.95, g = 0.52, b = 0.52, a = 1 }
+    end
+    if normalized == tostring(jobTypes.Unemployed or "Unemployed") then
+        return { r = 0.7, g = 0.7, b = 0.7, a = 1 }
+    end
+
+    return { r = 0.9, g = 0.9, b = 0.9, a = 1 }
+end
+
+local function getConstructionLevel(worker)
+    local skills = DC_Colony and DC_Colony.Skills or nil
+    local entry = skills and skills.GetSkillEntry and skills.GetSkillEntry(worker, "Construction") or nil
+    return math.max(0, math.floor(tonumber(entry and entry.level) or 0))
+end
+
+local function canSelectJob(config, worker, normalizedJob)
+    if normalizedJob == tostring((config.JobTypes or {}).Builder or "Builder") then
+        return getConstructionLevel(worker) > 0
+    end
+    return true
+end
+
+local function buildOrderedJobOptions(config, worker)
     local ordered = {}
     local seen = {}
     local jobTypes = config.JobTypes or {}
@@ -20,13 +59,18 @@ local function buildOrderedJobOptions(config)
         end
 
         local profile = config.GetJobProfile and config.GetJobProfile(normalized) or {}
+        local enabled = canSelectJob(config, worker, normalized)
         ordered[#ordered + 1] = {
             jobType = normalized,
-            label = tostring(profile.displayName or normalized)
+            label = tostring(profile.displayName or normalized),
+            enabled = enabled,
+            color = getJobDisplayColor(config, normalized),
+            disabledColor = enabled and nil or { r = 0.92, g = 0.28, b = 0.28, a = 1 }
         }
         seen[normalized] = true
     end
 
+    addJob(jobTypes.Unemployed)
     addJob(jobTypes.Scavenge)
     addJob(jobTypes.Farm)
     addJob(jobTypes.Fish)
@@ -34,9 +78,13 @@ local function buildOrderedJobOptions(config)
     for jobType, profile in pairs(config.JobProfiles or {}) do
         local normalized = config.NormalizeJobType and config.NormalizeJobType(jobType) or tostring(jobType or "")
         if normalized ~= "" and not seen[normalized] then
+            local enabled = canSelectJob(config, worker, normalized)
             extras[#extras + 1] = {
                 jobType = normalized,
-                label = tostring(profile and profile.displayName or normalized)
+                label = tostring(profile and profile.displayName or normalized),
+                enabled = enabled,
+                color = getJobDisplayColor(config, normalized),
+                disabledColor = enabled and nil or { r = 0.92, g = 0.28, b = 0.28, a = 1 }
             }
             seen[normalized] = true
         end
@@ -95,9 +143,25 @@ function DC_ColonyJobModal:createChildren()
     self.jobTickBox:initialise()
     self.jobTickBox:instantiate()
     self.jobTickBox:setFont(UIFont.Small)
+    self.jobTickBox.getTextColor = function(box, index, color)
+        local option = self.jobOptions and self.jobOptions[index] or nil
+        local palette = option and ((option.enabled == false and option.disabledColor) or option.color) or nil
+        if palette then
+            color.r = palette.r or 1
+            color.g = palette.g or 1
+            color.b = palette.b or 1
+            color.a = palette.a or 1
+            return
+        end
+        ISTickBox.getTextColor(box, index, color)
+    end
 
     for index, option in ipairs(self.jobOptions or {}) do
-        self.jobTickBox:addOption(tostring(option.label or option.jobType or "Unknown"))
+        local optionLabel = tostring(option.label or option.jobType or "Unknown")
+        self.jobTickBox:addOption(optionLabel)
+        if option.enabled == false then
+            self.jobTickBox:disableOption(optionLabel, true)
+        end
         self.jobTickBox:setSelected(index, option.jobType == self.selectedJobType)
         if option.jobType == self.selectedJobType then
             self.selectedOptionIndex = index
@@ -114,6 +178,7 @@ function DC_ColonyJobModal:createChildren()
     self.btnAutoRepeat = ISButton:new(math.floor((self.width - 150) / 2), buttonY, 150, 24, "", self, self.onToggleAutoRepeat)
     self.btnAutoRepeat:initialise()
     self.btnAutoRepeat:instantiate()
+    self.btnAutoRepeat:setEnable(false)
     self:addChild(self.btnAutoRepeat)
 
     self.btnCancel = ISButton:new(self.width - 100, buttonY, 90, 24, "Cancel", self, self.onCancel)
@@ -121,8 +186,19 @@ function DC_ColonyJobModal:createChildren()
     self.btnCancel:instantiate()
     self:addChild(self.btnCancel)
 
+    if self.selectedOptionIndex and self.jobOptions[self.selectedOptionIndex] and self.jobOptions[self.selectedOptionIndex].enabled == false then
+        self.selectedOptionIndex = nil
+        self.selectedJobType = nil
+    end
+
     if not self.selectedOptionIndex and #self.jobOptions > 0 then
-        self:selectJobIndex(1)
+        for index, option in ipairs(self.jobOptions) do
+            if option.enabled ~= false then
+                self:selectJobIndex(index)
+                return
+            end
+        end
+        self:updateConfirmState()
     else
         self:updateConfirmState()
     end
@@ -161,16 +237,16 @@ end
 
 function DC_ColonyJobModal:updateConfirmState()
     if self.btnAutoRepeat then
-        self.btnAutoRepeat:setTitle("Auto Repeat: " .. (self.autoRepeatJob == true and "On" or "Off"))
+        self.btnAutoRepeat:setTitle("Work Mode: Continuous")
     end
 
     if self.btnConfirm then
-        self.btnConfirm:setEnable(self.selectedOptionIndex ~= nil and self.selectedJobType ~= nil)
+        local option = self.selectedOptionIndex and self.jobOptions and self.jobOptions[self.selectedOptionIndex] or nil
+        self.btnConfirm:setEnable(option ~= nil and option.enabled ~= false and self.selectedJobType ~= nil)
     end
 end
 
 function DC_ColonyJobModal:onToggleAutoRepeat()
-    self.autoRepeatJob = not (self.autoRepeatJob == true)
     self:updateConfirmState()
 end
 
@@ -198,7 +274,7 @@ function DC_ColonyJobModal.Open(args)
     args = args or {}
 
     local config = DC_Colony and DC_Colony.Config or {}
-    local jobOptions = buildOrderedJobOptions(config)
+    local jobOptions = buildOrderedJobOptions(config, args.worker)
     if #jobOptions <= 0 then
         return nil
     end
@@ -231,7 +307,7 @@ function DC_ColonyJobModal.Open(args)
     modal.currentJobLabel = tostring(currentJobLabel or "Unknown")
     modal.jobOptions = jobOptions
     modal.selectedJobType = selectedJobType
-    modal.autoRepeatJob = args.autoRepeatJob == true or args.autoRepeatScavenge == true
+    modal.autoRepeatJob = selectedJobType ~= tostring((config.JobTypes or {}).Unemployed or "Unemployed")
     modal.onConfirmCallback = args.onConfirm
     modal:initialise()
     modal:instantiate()

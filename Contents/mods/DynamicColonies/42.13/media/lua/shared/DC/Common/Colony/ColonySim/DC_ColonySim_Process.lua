@@ -63,6 +63,7 @@ function Sim.ProcessWorker(worker, currentHour)
 
     local profile = Config.GetJobProfile(worker.jobType)
     local normalizedJobType = Config.NormalizeJobType(worker.jobType)
+    local isUnemployedJob = normalizedJobType == (Config.JobTypes and Config.JobTypes.Unemployed)
     local isBuilderJob = normalizedJobType == (Config.JobTypes and Config.JobTypes.Builder)
     local isDoctorJob = normalizedJobType == (Config.JobTypes and Config.JobTypes.Doctor)
     local scavengeLoadout = nil
@@ -106,6 +107,24 @@ function Sim.ProcessWorker(worker, currentHour)
     worker.jobSkillSpeedMultiplier = jobSkillEffects.speedMultiplier
     worker.jobSkillYieldMultiplier = jobSkillEffects.yieldMultiplier
     worker.jobSkillBotchMultiplier = jobSkillEffects.botchChanceMultiplier
+    if isUnemployedJob then
+        worker.jobEnabled = false
+        worker.state = Config.States.Idle
+        worker.workProgress = 0
+        worker.workTarget = nil
+        worker.workCycleHours = nil
+        worker.jobSkillID = nil
+        worker.jobSkillLabel = nil
+        worker.jobSkillLevel = 0
+        worker.jobSkillSpeedMultiplier = 1
+        worker.jobSkillYieldMultiplier = 1
+        worker.jobSkillBotchMultiplier = 1
+        if deltaHours > 0 then
+            worker.lastSimHour = currentHour
+        end
+        Registry.RecalculateWorker(worker)
+        return
+    end
     if isBuilderJob and DC_Buildings and DC_Buildings.GetProjectForWorker then
         local builderProject = DC_Buildings.GetProjectForWorker(worker)
         if builderProject then

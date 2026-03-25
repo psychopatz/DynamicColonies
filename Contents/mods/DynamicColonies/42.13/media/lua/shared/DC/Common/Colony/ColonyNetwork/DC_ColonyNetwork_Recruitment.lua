@@ -178,8 +178,8 @@ local function createWorkerFromRecruitArgs(owner, args, sourceSoul)
         isFemale = sourceSoul.isFemale
     end
     local worker = Registry.CreateWorker(owner, {
-        jobType = args.jobType or Config.GetDefaultJobForArchetype(archetypeID),
-        profession = args.jobType or Config.GetDefaultJobForArchetype(archetypeID),
+        jobType = args.jobType or Config.JobTypes.Unemployed or Config.GetDefaultJobForArchetype(archetypeID),
+        profession = args.jobType or Config.JobTypes.Unemployed or Config.GetDefaultJobForArchetype(archetypeID),
         archetypeID = archetypeID,
         name = args.name or (sourceSoul and sourceSoul.name),
         isFemale = isFemale,

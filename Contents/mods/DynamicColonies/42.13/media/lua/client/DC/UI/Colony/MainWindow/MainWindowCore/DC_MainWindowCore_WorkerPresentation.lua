@@ -42,6 +42,53 @@ function Internal.getJobDisplayName(worker, profile)
     return tostring(sourceProfile.displayName or worker.jobType or worker.profession or "Unknown")
 end
 
+function Internal.getJobColor(jobType)
+    local config = Internal.Config or {}
+    local normalizedJob = config.NormalizeJobType and config.NormalizeJobType(jobType) or tostring(jobType or "")
+    local jobTypes = config.JobTypes or {}
+
+    if normalizedJob == tostring(jobTypes.Builder or "Builder") then
+        return { r = 0.48, g = 0.9, b = 0.48, a = 1 }
+    end
+    if normalizedJob == tostring(jobTypes.Scavenge or "Scavenge") then
+        return { r = 0.95, g = 0.78, b = 0.36, a = 1 }
+    end
+    if normalizedJob == tostring(jobTypes.Farm or "Farm") then
+        return { r = 0.62, g = 0.88, b = 0.42, a = 1 }
+    end
+    if normalizedJob == tostring(jobTypes.Fish or "Fish") then
+        return { r = 0.48, g = 0.78, b = 0.98, a = 1 }
+    end
+    if normalizedJob == tostring(jobTypes.Doctor or "Doctor") then
+        return { r = 0.95, g = 0.52, b = 0.52, a = 1 }
+    end
+    if normalizedJob == tostring(jobTypes.Unemployed or "Unemployed") then
+        return { r = 0.7, g = 0.7, b = 0.7, a = 1 }
+    end
+
+    return { r = 0.82, g = 0.82, b = 0.82, a = 1 }
+end
+
+function Internal.getWorkerJobColor(worker, profile)
+    local sourceProfile = profile or (Internal.Config.GetJobProfile and Internal.Config.GetJobProfile(worker and worker.jobType)) or {}
+    return Internal.getJobColor(sourceProfile.jobType or worker and worker.jobType)
+end
+
+function Internal.getWorkerSkillLevel(worker, skillID)
+    local skills = DC_Colony and DC_Colony.Skills or nil
+    local entry = skills and skills.GetSkillEntry and skills.GetSkillEntry(worker, skillID) or nil
+    return math.max(0, math.floor(tonumber(entry and entry.level) or 0))
+end
+
+function Internal.canWorkerTakeJob(worker, jobType)
+    local config = Internal.Config or {}
+    local normalizedJob = config.NormalizeJobType and config.NormalizeJobType(jobType) or tostring(jobType or "")
+    if normalizedJob == tostring((config.JobTypes or {}).Builder or "Builder") then
+        return Internal.getWorkerSkillLevel(worker, "Construction") > 0
+    end
+    return true
+end
+
 function Internal.getNpcConditionLabel(worker)
     local state = tostring(worker and worker.state or "Idle")
     if state == "Resting" then

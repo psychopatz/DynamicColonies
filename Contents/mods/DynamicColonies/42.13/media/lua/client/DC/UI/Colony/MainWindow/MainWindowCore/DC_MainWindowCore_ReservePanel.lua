@@ -40,6 +40,13 @@ local function getWorkerStateLabel(worker)
     return tostring(worker and worker.state or "Idle")
 end
 
+local function getWorkerJobColor(worker, profile)
+    if Internal.getWorkerJobColor then
+        return Internal.getWorkerJobColor(worker, profile)
+    end
+    return { r = 0.68, g = 0.8, b = 1, a = 1 }
+end
+
 local function formatDaysAndEta(daysValue, hoursValue)
     if Internal.formatDaysAndEta then
         return Internal.formatDaysAndEta(daysValue, hoursValue)
@@ -394,9 +401,16 @@ function ColonyProfileCard:prerender()
 
     self:drawText(tostring(worker.name or "Worker"), barsX, topY, 0.95, 0.97, 1, 1, UIFont.Large)
     topY = topY + 24
+    local jobLabel = getJobDisplayName(worker, profile)
+    local stateLabel = getWorkerStateLabel(worker)
+    local separator = " | "
+    local tm = getTextManager()
+    local jobColor = getWorkerJobColor(worker, profile)
+    self:drawText(jobLabel, barsX, topY, jobColor.r, jobColor.g, jobColor.b, jobColor.a or 1, UIFont.Small)
+    self:drawText(separator, barsX + tm:MeasureStringX(UIFont.Small, jobLabel), topY, 0.68, 0.8, 1, 1, UIFont.Small)
     self:drawText(
-        getJobDisplayName(worker, profile) .. " | " .. getWorkerStateLabel(worker),
-        barsX,
+        stateLabel,
+        barsX + tm:MeasureStringX(UIFont.Small, jobLabel .. separator),
         topY,
         0.68,
         0.8,

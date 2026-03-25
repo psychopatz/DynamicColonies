@@ -497,17 +497,7 @@ function Config.GetProfile(profession)
 end
 
 function Config.GetDefaultJobForArchetype(archetypeID)
-    local archetype = Config.NormalizeArchetypeID(archetypeID)
-    if archetype == "Doctor" then
-        return Config.JobTypes.Doctor
-    end
-    if archetype == "Farmer" then
-        return Config.JobTypes.Farm
-    end
-    if archetype == "Angler" then
-        return Config.JobTypes.Fish
-    end
-    return Config.JobTypes.Scavenge
+    return Config.JobTypes.Unemployed
 end
 
 function Config.GetJobSpeedMultiplier(archetypeID, jobType)
@@ -537,6 +527,7 @@ end
 
 function Config.GetNextJobType(jobType)
     local order = {
+        Config.JobTypes.Unemployed,
         Config.JobTypes.Builder,
         Config.JobTypes.Doctor,
         Config.JobTypes.Scavenge,

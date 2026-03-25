@@ -56,6 +56,9 @@ end
 
 function Config.GetWorkerJobSkillID(worker, profile)
     local normalizedJob = Config.NormalizeJobType(worker and worker.jobType or profile and profile.jobType)
+    if normalizedJob == Config.JobTypes.Unemployed then
+        return nil
+    end
     if normalizedJob == Config.JobTypes.Builder then
         return "Construction"
     end

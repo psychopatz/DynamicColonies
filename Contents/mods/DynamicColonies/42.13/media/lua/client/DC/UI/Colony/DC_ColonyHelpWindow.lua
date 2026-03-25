@@ -40,7 +40,7 @@ local function buildHelpText()
         "<RGB:1,1,1> Scavenging <RGB:0.78,0.78,0.78> there, then travel ",
         "<RGB:1,1,1> Away <RGB:0.78,0.78,0.78> back home to store the haul. <LINE> ",
         " <RGB:0.78,0.78,0.78> Found loot first goes into the worker's carried haul. When the pack is full, supplies run low, or you call them back, the trip ends and they head home with what they found. <LINE> ",
-        " <RGB:0.88,0.88,0.88> Auto Repeat: <RGB:0.78,0.78,0.78> if enabled, the scavenger will head out again after unloading and restocking, but only when provisions, tools, and warehouse space are ready. <LINE> ",
+        " <RGB:0.88,0.88,0.88> Continuous Work: <RGB:0.78,0.78,0.78> workers keep repeating their assigned job until you press Stop Job. Scavengers still wait for provisions, tools, and warehouse space before heading out again. <LINE> ",
         " <RGB:0.88,0.88,0.88> Important: <RGB:0.78,0.78,0.78> only the active haul is weight-limited. Provisions and equipment are not counted toward haul weight. <LINE> ",
         " <RGB:0.88,0.88,0.88> Body carry limit: <RGB:0.78,0.78,0.78> controlled by worker archetype and the Colony sandbox carry-weight setting. <LINE> ",
         " <RGB:0.88,0.88,0.88> Container reduction: <RGB:0.78,0.78,0.78> bags apply their capacity and weight reduction before leftover weight hits the body limit. <LINE> <LINE> ",

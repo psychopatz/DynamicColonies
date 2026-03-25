@@ -29,6 +29,36 @@ local function getSelectedWorkerID(list)
     return nil
 end
 
+local function drawSubtitleLine(list, x, y, worker)
+    local stateLabel = type(Internal.getNpcConditionLabel) == "function"
+        and Internal.getNpcConditionLabel(worker)
+        or tostring(worker and worker.state or "Idle")
+    local jobLabel = type(Internal.getJobDisplayName) == "function"
+        and Internal.getJobDisplayName(worker)
+        or tostring(worker and worker.jobType or "Unknown")
+    local presenceLabel = type(Internal.getWorkerPresenceLabel) == "function"
+        and Internal.getWorkerPresenceLabel(worker)
+        or tostring(worker and worker.presenceState or "Home")
+    local jobColor = type(Internal.getWorkerJobColor) == "function"
+        and Internal.getWorkerJobColor(worker)
+        or { r = 0.82, g = 0.82, b = 0.82, a = 1 }
+    local font = UIFont.Small
+    local tm = getTextManager()
+    local separator = " | "
+    local muted = { r = 0.72, g = 0.72, b = 0.72, a = 0.95 }
+    local cursorX = x
+
+    list:drawText(stateLabel, cursorX, y, muted.r, muted.g, muted.b, muted.a, font)
+    cursorX = cursorX + tm:MeasureStringX(font, stateLabel)
+    list:drawText(separator, cursorX, y, muted.r, muted.g, muted.b, muted.a, font)
+    cursorX = cursorX + tm:MeasureStringX(font, separator)
+    list:drawText(jobLabel, cursorX, y, jobColor.r, jobColor.g, jobColor.b, jobColor.a, font)
+    cursorX = cursorX + tm:MeasureStringX(font, jobLabel)
+    list:drawText(separator, cursorX, y, muted.r, muted.g, muted.b, muted.a, font)
+    cursorX = cursorX + tm:MeasureStringX(font, separator)
+    list:drawText(presenceLabel, cursorX, y, muted.r, muted.g, muted.b, muted.a, font)
+end
+
 function ColonyWorkerList:new(x, y, width, height)
     local o = ISScrollingListBox:new(x, y, width, height)
     setmetatable(o, self)
@@ -59,16 +89,7 @@ function ColonyWorkerList:doDrawItem(y, item, alt)
     end
 
     self:drawText(tostring(worker.name or worker.workerID), 12, y + 7, 0.88, 0.92, 1, 1, UIFont.Medium)
-    self:drawText(
-        formatWorkerListSubtitle(worker),
-        12,
-        y + 33,
-        0.72,
-        0.72,
-        0.72,
-        0.95,
-        UIFont.Small
-    )
+    drawSubtitleLine(self, 12, y + 33, worker)
     if isSelected then
         self:drawRectBorder(0, y, self.width, self.itemheight, 0.28, 0.98, 0.86, 0.4)
     else

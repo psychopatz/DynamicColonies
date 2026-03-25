@@ -4,6 +4,7 @@ DC_Colony.Config = DC_Colony.Config or {}
 local Config = DC_Colony.Config
 
 Config.JobTypes = {
+    Unemployed = "Unemployed",
     Builder = "Builder",
     Doctor = "Doctor",
     Farm = "Farm",
@@ -12,6 +13,16 @@ Config.JobTypes = {
 }
 
 Config.JobProfiles = {
+    Unemployed = {
+        jobType = Config.JobTypes.Unemployed,
+        displayName = "Unemployed",
+        siteType = nil,
+        requiredToolTags = {},
+        cycleHours = 24,
+        dailyCaloriesNeed = 2000,
+        dailyHydrationNeed = 1600,
+        outputRules = {}
+    },
     Builder = {
         jobType = Config.JobTypes.Builder,
         displayName = "Builder",

@@ -41,6 +41,12 @@ local function getSelectedWorkerForAction(window)
     return window.selectedWorker or window.selectedWorkerSummary or nil
 end
 
+local function isUnemployedJob(worker)
+    local config = getConfig()
+    local normalizedJob = config.NormalizeJobType and config.NormalizeJobType((worker and worker.jobType) or nil) or tostring(worker and worker.jobType or "")
+    return normalizedJob == ((config.JobTypes or {}).Unemployed)
+end
+
 local function updateToggleJobStatus(window, enabled, normalizedJob, presenceState)
     local config = getConfig()
 
@@ -103,7 +109,7 @@ local function getScavengeProvisionWarningText(window)
         .. "Calories: " .. formatReserveValue(totalCalories)
         .. "\nHydration: " .. formatReserveValue(totalHydration)
         .. "\n\n"
-        .. "Auto repeat: " .. ((((worker and worker.autoRepeatJob == true) or (worker and worker.autoRepeatScavenge == true)) and "On") or "Off")
+        .. "Work mode: Continuous until stopped"
         .. "\n\n"
         .. warningLine
         .. "\n\nPress Yes to start anyway, or No to provision them first."
@@ -169,6 +175,13 @@ function DC_MainWindow:onToggleJob()
         return
     end
 
+    local activeWorker = getSelectedWorkerForAction(self)
+    if isUnemployedJob(activeWorker) then
+        self:updateStatus("This worker is unemployed. Choose a role first.")
+        self:onCycleJob()
+        return
+    end
+
     local config = getConfig()
     local state = tostring((self.selectedWorker and self.selectedWorker.state) or self.selectedWorkerSummary.state or "")
     if state == tostring((config.States or {}).Dead or "Dead") then
@@ -201,26 +214,7 @@ function DC_MainWindow:onToggleJob()
 end
 
 function DC_MainWindow:onToggleAutoRepeat()
-    if not self.selectedWorkerSummary then
-        self:updateStatus("Select a worker first.")
-        return
-    end
-
-    local config = getConfig()
-    local worker = getSelectedWorkerForAction(self)
-    local normalizedJob = config.NormalizeJobType and config.NormalizeJobType((worker and worker.jobType) or self.selectedWorkerSummary.jobType)
-        or tostring((worker and worker.jobType) or self.selectedWorkerSummary.jobType or "")
-    if normalizedJob ~= ((config.JobTypes or {}).Scavenge) then
-        self:updateStatus("Auto repeat is only available for scavengers.")
-        return
-    end
-
-    local enabled = not ((worker and worker.autoRepeatScavenge == true) or (self.selectedWorkerSummary.autoRepeatScavenge == true))
-    self:sendColonyCommand("SetWorkerAutoRepeatScavenge", {
-        workerID = self.selectedWorkerSummary.workerID,
-        enabled = enabled
-    })
-    self:updateStatus(enabled and "Auto repeat enabled for scavenging." or "Auto repeat disabled for scavenging.")
+    self:updateStatus("Continuous work is always on. Use Stop Job when you want a worker to stop.")
 end
 
 function DC_MainWindow:onCycleJob()
@@ -244,14 +238,15 @@ function DC_MainWindow:onCycleJob()
         promptText = "Choose a new job for " .. workerName .. ".",
         selectedJobType = normalizedJobType,
         autoRepeatJob = currentAutoRepeat,
+        worker = worker,
         onConfirm = function(jobType, option, autoRepeatJob)
             local selectedJobType = config.NormalizeJobType and config.NormalizeJobType(jobType) or tostring(jobType or "")
-            local targetAutoRepeat = autoRepeatJob == true
+            local targetAutoRepeat = selectedJobType ~= tostring((config.JobTypes or {}).Unemployed or "Unemployed")
             local changedJob = selectedJobType ~= normalizedJobType
             local changedAutoRepeat = targetAutoRepeat ~= currentAutoRepeat
 
             if not changedJob and not changedAutoRepeat then
-                self:updateStatus(workerName .. " is already set to that job and auto-repeat state.")
+                self:updateStatus(workerName .. " is already set to that job.")
                 return
             end
 
@@ -270,11 +265,11 @@ function DC_MainWindow:onCycleJob()
             end
 
             if changedJob and changedAutoRepeat then
-                self:updateStatus("Changing worker job and auto-repeat settings...")
+                self:updateStatus("Changing worker job...")
             elseif changedJob then
                 self:updateStatus("Changing worker job to " .. tostring(option and option.label or selectedJobType) .. "...")
             else
-                self:updateStatus(targetAutoRepeat and "Auto repeat enabled." or "Auto repeat disabled.")
+                self:updateStatus("Continuous work is always on for active jobs.")
             end
         end
     })
