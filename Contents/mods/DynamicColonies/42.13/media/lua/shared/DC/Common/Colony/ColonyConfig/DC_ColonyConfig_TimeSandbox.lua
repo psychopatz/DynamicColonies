@@ -14,6 +14,10 @@ function Config.GetCurrentHour()
 end
 
 function Config.GetSandboxTable()
+    return SandboxVars and SandboxVars.DynamicColonies or {}
+end
+
+function Config.GetLegacySandboxTable()
     return SandboxVars and SandboxVars.DynamicTrading or {}
 end
 
@@ -21,25 +25,71 @@ function Config.GetSandboxNumber(key, fallback)
     local sandbox = Config.GetSandboxTable()
     local value = tonumber(sandbox and sandbox[key])
     if value == nil then
+        local legacy = Config.GetLegacySandboxTable()
+        value = tonumber(legacy and legacy[key])
+    end
+    if value == nil then
         return fallback
     end
     return value
 end
 
+function Config.GetSandboxNumberAny(keys, fallback)
+    local sandbox = Config.GetSandboxTable()
+    for _, key in ipairs(keys or {}) do
+        local value = tonumber(sandbox and sandbox[key])
+        if value ~= nil then
+            return value
+        end
+    end
+    local legacy = Config.GetLegacySandboxTable()
+    for _, key in ipairs(keys or {}) do
+        local value = tonumber(legacy and legacy[key])
+        if value ~= nil then
+            return value
+        end
+    end
+    return fallback
+end
+
 function Config.GetColonyDailyCaloriesUse()
-    return math.max(0, Config.GetSandboxNumber("ColonyDailyCaloriesUse", Config.DEFAULT_LABOUR_DAILY_CALORIES_USE) or Config.DEFAULT_LABOUR_DAILY_CALORIES_USE)
+    return math.max(
+        0,
+        Config.GetSandboxNumberAny(
+            { "ColonyDailyCaloriesUse", "LabourDailyCaloriesUse" },
+            Config.DEFAULT_LABOUR_DAILY_CALORIES_USE
+        ) or Config.DEFAULT_LABOUR_DAILY_CALORIES_USE
+    )
 end
 
 function Config.GetColonyDailyHydrationUse()
-    return math.max(0, Config.GetSandboxNumber("ColonyDailyHydrationUse", Config.DEFAULT_LABOUR_DAILY_HYDRATION_USE) or Config.DEFAULT_LABOUR_DAILY_HYDRATION_USE)
+    return math.max(
+        0,
+        Config.GetSandboxNumberAny(
+            { "ColonyDailyHydrationUse", "LabourDailyHydrationUse" },
+            Config.DEFAULT_LABOUR_DAILY_HYDRATION_USE
+        ) or Config.DEFAULT_LABOUR_DAILY_HYDRATION_USE
+    )
 end
 
 function Config.GetDefaultWorkerCarryWeight()
-    return math.max(0, Config.GetSandboxNumber("ColonyBaseCarryWeight", Config.DEFAULT_WORKER_CARRY_WEIGHT) or Config.DEFAULT_WORKER_CARRY_WEIGHT)
+    return math.max(
+        0,
+        Config.GetSandboxNumberAny(
+            { "ColonyBaseCarryWeight", "LabourBaseCarryWeight" },
+            Config.DEFAULT_WORKER_CARRY_WEIGHT
+        ) or Config.DEFAULT_WORKER_CARRY_WEIGHT
+    )
 end
 
 function Config.GetScavengeTravelHours()
-    return math.max(0, Config.GetSandboxNumber("NPCTradingWalkHours", Config.DEFAULT_SCAVENGE_TRAVEL_HOURS) or Config.DEFAULT_SCAVENGE_TRAVEL_HOURS)
+    return math.max(
+        0,
+        Config.GetSandboxNumberAny(
+            { "ColonyScavengeTravelHours", "NPCTradingWalkHours" },
+            Config.DEFAULT_SCAVENGE_TRAVEL_HOURS
+        ) or Config.DEFAULT_SCAVENGE_TRAVEL_HOURS
+    )
 end
 
 local function roundToNearestWhole(value)
@@ -51,13 +101,20 @@ local function roundToNearestWhole(value)
 end
 
 function Config.GetScavengeBaseWorkAmount()
-    local sandbox = Config.GetSandboxTable()
-    local configuredAmount = sandbox and sandbox.ColonyBaseWorkAmount
+    local configuredAmount = Config.GetSandboxNumberAny(
+        { "ColonyBaseWorkAmount", "LabourBaseWorkAmount" },
+        nil
+    )
     if configuredAmount ~= nil then
         return math.max(1, roundToNearestWhole(configuredAmount))
     end
 
+    local sandbox = Config.GetSandboxTable()
+    local legacy = Config.GetLegacySandboxTable()
     local legacyHours = tonumber(sandbox and sandbox.ColonyBaseWorkCycleHours)
+    if legacyHours == nil then
+        legacyHours = tonumber(legacy and legacy.ColonyBaseWorkCycleHours)
+    end
     if legacyHours and legacyHours > 0 then
         local defaultLegacyHours = math.max(0.1, tonumber(Config.DEFAULT_SCAVENGE_WORK_CYCLE_HOURS) or 16)
         local defaultAmount = math.max(1, tonumber(Config.DEFAULT_SCAVENGE_WORK_AMOUNT) or 500)
@@ -75,7 +132,32 @@ function Config.GetScavengeBaseWorkPerHour()
 end
 
 function Config.GetScavengeBaseWorkMultiplier()
-    return math.max(0.01, Config.GetSandboxNumber("ColonyBaseWorkMultiplier", Config.DEFAULT_SCAVENGE_BASE_WORK_MULTIPLIER) or Config.DEFAULT_SCAVENGE_BASE_WORK_MULTIPLIER)
+    return math.max(
+        0.01,
+        Config.GetSandboxNumberAny(
+            { "ColonyBaseWorkMultiplier", "LabourBaseWorkMultiplier" },
+            Config.DEFAULT_SCAVENGE_BASE_WORK_MULTIPLIER
+        ) or Config.DEFAULT_SCAVENGE_BASE_WORK_MULTIPLIER
+    )
+end
+
+function Config.GetFishingBaseWorkAmount()
+    local configuredAmount = Config.GetSandboxNumberAny(
+        { "ColonyFishingWorkAmount", "LabourFishingWorkAmount" },
+        nil
+    )
+    if configuredAmount ~= nil then
+        return math.max(1, roundToNearestWhole(configuredAmount))
+    end
+
+    return math.max(1, tonumber(Config.DEFAULT_FISHING_WORK_AMOUNT) or tonumber(Config.DEFAULT_SCAVENGE_WORK_AMOUNT) or 500)
+end
+
+function Config.GetFishingBaseWorkPerHour()
+    local defaultAmount = math.max(1, tonumber(Config.DEFAULT_FISHING_WORK_AMOUNT) or tonumber(Config.DEFAULT_SCAVENGE_WORK_AMOUNT) or 500)
+    local fishProfile = Config.JobProfiles and Config.JobProfiles.Fish or nil
+    local defaultCycleHours = math.max(0.1, tonumber(fishProfile and fishProfile.cycleHours) or 18)
+    return defaultAmount / defaultCycleHours
 end
 
 function Config.GetEffectiveWorkTarget(worker, profile)
@@ -83,6 +165,9 @@ function Config.GetEffectiveWorkTarget(worker, profile)
     local normalizedJob = Config.NormalizeJobType((worker and worker.jobType) or (safeProfile and safeProfile.jobType))
     if normalizedJob == (Config.JobTypes and Config.JobTypes.Scavenge) then
         return Config.GetScavengeBaseWorkAmount()
+    end
+    if normalizedJob == (Config.JobTypes and Config.JobTypes.Fish) then
+        return Config.GetFishingBaseWorkAmount()
     end
 
     return math.max(0.1, tonumber(safeProfile and safeProfile.cycleHours) or 24)

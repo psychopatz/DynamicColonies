@@ -216,10 +216,16 @@ function Sim.ProcessFishingJob(worker, ctx)
     local jobSkillEffects = ctx.jobSkillEffects
 
     local loadout = Config.GetFishingLoadout and Config.GetFishingLoadout(worker) or nil
+    local baseWorkPerHour = math.max(
+        0.01,
+        tonumber(Config.GetFishingBaseWorkPerHour and Config.GetFishingBaseWorkPerHour())
+            or 1
+    )
     local finalSpeedMultiplier = baseSpeedMultiplier
     if loadout and loadout.baitApplies then
         finalSpeedMultiplier = finalSpeedMultiplier * math.max(1.0, tonumber(loadout.baitSpeedMultiplier) or 1.0)
     end
+    local effectiveWorkPerHour = baseWorkPerHour * finalSpeedMultiplier
 
     worker.fishingTier = loadout and loadout.tier or 0
     worker.fishingTierLabel = loadout and loadout.tierLabel or (Config.GetFishingTierLabel and Config.GetFishingTierLabel(0)) or nil
@@ -233,7 +239,7 @@ function Sim.ProcessFishingJob(worker, ctx)
         Internal.markWorkerDead(worker, currentHour, normalizedJobType, Config.PresenceStates.Home, hasCalories, hasHydration)
     elseif worker.jobEnabled and toolsReady and hasHydration and hasCalories and not forcedRest then
         worker.state = Config.States.Working
-        worker.workProgress = Internal.clampHours(worker.workProgress) + (workableHours * finalSpeedMultiplier)
+        worker.workProgress = Internal.clampHours(worker.workProgress) + (workableHours * effectiveWorkPerHour)
         didWorkThisTick = workableHours > 0
 
         while worker.workProgress >= cycleHours do

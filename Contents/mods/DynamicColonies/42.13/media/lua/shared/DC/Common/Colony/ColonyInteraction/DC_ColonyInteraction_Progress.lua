@@ -143,6 +143,85 @@ function Interaction.GetProgressDescriptor(worker, profile)
         }
     end
 
+    if jobKey == tostring((Config.JobTypes or {}).Fish or "Fish") then
+        local workTarget = math.max(
+            1,
+            tonumber(worker.workTarget)
+                or tonumber(Config.GetEffectiveWorkTarget and Config.GetEffectiveWorkTarget(worker, profile))
+                or tonumber(Config.GetEffectiveCycleHours and Config.GetEffectiveCycleHours(worker, profile))
+                or tonumber(profile and profile.cycleHours)
+                or 1
+        )
+        local progressAmount = math.max(0, tonumber(worker.workProgress) or 0)
+        if progressAmount > workTarget then
+            progressAmount = progressAmount % workTarget
+        end
+
+        local baseSpeed = math.max(
+            0.01,
+            tonumber(worker.baseWorkSpeedMultiplier)
+                or tonumber(Config.GetBaseWorkSpeedMultiplier and Config.GetBaseWorkSpeedMultiplier(worker, profile))
+                or 1
+        )
+        local skillEffects = Skills and Skills.GetWorkerJobEffects and Skills.GetWorkerJobEffects(worker, profile) or nil
+        local skillSpeed = math.max(0.01, tonumber(skillEffects and skillEffects.speedMultiplier or worker.jobSkillSpeedMultiplier or 1) or 1)
+        local loadout = Config.GetFishingLoadout and Config.GetFishingLoadout(worker) or nil
+        local equipmentSpeed = 1
+        if loadout and loadout.baitApplies then
+            equipmentSpeed = math.max(1.0, tonumber(loadout.baitSpeedMultiplier) or 1.0)
+        end
+        local effectiveSpeed = baseSpeed * skillSpeed * equipmentSpeed
+        local baseWorkPerHour = math.max(
+            0.01,
+            tonumber(Config.GetFishingBaseWorkPerHour and Config.GetFishingBaseWorkPerHour())
+                or 1
+        )
+        local effectiveWorkPerHour = baseWorkPerHour * effectiveSpeed
+        local remainingWorkAmount = math.max(0, workTarget - progressAmount)
+        local remainingWorldHours = effectiveWorkPerHour > 0 and (remainingWorkAmount / effectiveWorkPerHour) or nil
+
+        return {
+            label = DynamicTrading.FormatInteractionString(template.activeText, {
+                place = Interaction.GetPlaceLabel(worker),
+                count = tostring(math.max(0, tonumber(worker and worker.outputCount) or 0)),
+                eta = Interaction.formatDurationHours(remainingWorldHours),
+                progress = Interaction.formatWholeAmount(progressAmount),
+                total = Interaction.formatWholeAmount(workTarget)
+            }),
+            displayText = DynamicTrading.FormatInteractionString(template.activeText, {
+                place = Interaction.GetPlaceLabel(worker),
+                count = tostring(math.max(0, tonumber(worker and worker.outputCount) or 0)),
+                eta = Interaction.formatDurationHours(remainingWorldHours),
+                progress = Interaction.formatWholeAmount(progressAmount),
+                total = Interaction.formatWholeAmount(workTarget)
+            }),
+            fillRatio = math.max(0, math.min(1, progressAmount / workTarget)),
+            captionText = DynamicTrading.FormatInteractionString(template.captionText, {
+                place = Interaction.GetPlaceLabel(worker),
+                count = tostring(math.max(0, tonumber(worker and worker.outputCount) or 0)),
+                eta = Interaction.formatDurationHours(remainingWorldHours),
+                progress = Interaction.formatWholeAmount(progressAmount),
+                total = Interaction.formatWholeAmount(workTarget)
+            }),
+            summaryText = Interaction.formatWholeAmount(progressAmount)
+                .. " / "
+                .. Interaction.formatWholeAmount(workTarget)
+                .. " work | Speed x"
+                .. Interaction.formatDecimal(effectiveSpeed, 2),
+            progressAmount = progressAmount,
+            workTarget = workTarget,
+            progressHours = progressAmount,
+            cycleHours = workTarget,
+            remainingWorldHours = remainingWorldHours,
+            baseSpeedMultiplier = baseSpeed,
+            skillSpeedMultiplier = skillSpeed,
+            equipmentSpeedMultiplier = equipmentSpeed,
+            effectiveSpeedMultiplier = effectiveSpeed,
+            effectiveWorkPerHour = effectiveWorkPerHour,
+            color = template.color
+        }
+    end
+
     if jobKey == tostring((Config.JobTypes or {}).Builder or "Builder") then
         local workTarget = math.max(
             1,

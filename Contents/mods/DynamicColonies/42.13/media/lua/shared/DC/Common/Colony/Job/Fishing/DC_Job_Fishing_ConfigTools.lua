@@ -32,7 +32,32 @@ Config.FishingCatchPools = Config.FishingCatchPools or {
 }
 
 Config.FishingItemProfiles = Config.FishingItemProfiles or {
-    ["Base.FishingSpear"] = {
+    ["Base.SpearCrafted"] = {
+        tier = 1,
+        labourTags = { "Fish.Tool.Basic" },
+        capabilities = { "Fish.Tool.Basic", "Fish.Tool.Spear" },
+    },
+    ["Base.SpearCraftedFireHardened"] = {
+        tier = 1,
+        labourTags = { "Fish.Tool.Basic" },
+        capabilities = { "Fish.Tool.Basic", "Fish.Tool.Spear" },
+    },
+    ["Base.SpearCrude"] = {
+        tier = 1,
+        labourTags = { "Fish.Tool.Basic" },
+        capabilities = { "Fish.Tool.Basic", "Fish.Tool.Spear" },
+    },
+    ["Base.SpearCrudeLong"] = {
+        tier = 1,
+        labourTags = { "Fish.Tool.Basic" },
+        capabilities = { "Fish.Tool.Basic", "Fish.Tool.Spear" },
+    },
+    ["Base.SpearStone"] = {
+        tier = 1,
+        labourTags = { "Fish.Tool.Basic" },
+        capabilities = { "Fish.Tool.Basic", "Fish.Tool.Spear" },
+    },
+    ["Base.SpearStoneLong"] = {
         tier = 1,
         labourTags = { "Fish.Tool.Basic" },
         capabilities = { "Fish.Tool.Basic", "Fish.Tool.Spear" },
@@ -269,7 +294,12 @@ function Config.GetFishingLoadout(worker)
     end
 
     loadout.activeToolIndex, loadout.activeToolEntry = selectBestEntryForTag(worker, "Fish.Tool.Basic", {
-        "Base.FishingSpear",
+        "Base.SpearCrafted",
+        "Base.SpearCraftedFireHardened",
+        "Base.SpearCrude",
+        "Base.SpearCrudeLong",
+        "Base.SpearStone",
+        "Base.SpearStoneLong",
         "Base.CraftedFishingRod",
         "Base.FishingRod"
     })

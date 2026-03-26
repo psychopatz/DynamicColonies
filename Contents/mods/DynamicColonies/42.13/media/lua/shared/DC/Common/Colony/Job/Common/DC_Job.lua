@@ -4,6 +4,7 @@ DC_Colony.Job = DC_Colony.Job or {}
 -- Common Core Dependencies
 require "DC/Common/Colony/Job/Common/DC_Job_Config"
 require "DC/Common/Colony/Job/Common/DC_Job_ConfigLogic"
+require "DC/Common/Colony/ColonyEquipment/Requirements/DC_ColonyEquipment_Requirements"
 
 -- Scavenging Subsystem
 require "DC/Common/Colony/Job/Scavenging/DC_Job_Scavenging_ConfigTools"

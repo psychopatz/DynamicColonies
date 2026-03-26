@@ -1,0 +1,24 @@
+Sandbox_EN = {
+    Sandbox_DynamicColoniesLabour = "Dynamic Colonies Labour",
+
+    Sandbox_DynamicColonies_ColonyDailyCaloriesUse = "Labour: Hunger Use Per Day",
+    Sandbox_DynamicColonies_ColonyDailyCaloriesUse_tooltip = "Sets the fixed daily hunger reserve consumed by colony workers. This value is also used as the hunger bar's full-day target.",
+
+    Sandbox_DynamicColonies_ColonyDailyHydrationUse = "Labour: Hydration Use Per Day",
+    Sandbox_DynamicColonies_ColonyDailyHydrationUse_tooltip = "Sets the fixed daily hydration reserve consumed by colony workers. This value is also used as the hydration bar's full-day target.",
+
+    Sandbox_DynamicColonies_ColonyBaseCarryWeight = "Labour: Base Carry Weight",
+    Sandbox_DynamicColonies_ColonyBaseCarryWeight_tooltip = "Sets the default body carry limit for colony workers before bag weight reduction is applied. Higher values let scavengers haul more before returning home.",
+
+    Sandbox_DynamicColonies_ColonyScavengeTravelHours = "Scavenge Travel Hours",
+    Sandbox_DynamicColonies_ColonyScavengeTravelHours_tooltip = "How many in-game hours a scavenger spends traveling to or from the assigned scavenging site.",
+
+    Sandbox_DynamicColonies_ColonyBaseWorkAmount = "Scavenge Work Amount",
+    Sandbox_DynamicColonies_ColonyBaseWorkAmount_tooltip = "Sets the total work required for a scavenger to finish one loot roll. Higher values make each scavenging roll take longer unless the worker has better speed multipliers.",
+
+    Sandbox_DynamicColonies_ColonyBaseWorkMultiplier = "Scavenge Base Speed Multiplier",
+    Sandbox_DynamicColonies_ColonyBaseWorkMultiplier_tooltip = "Sets the base scavenging speed multiplier before archetype bonuses and equipment bonuses are applied. Higher values make scavengers complete work faster.",
+
+    Sandbox_DynamicColonies_ColonyFishingWorkAmount = "Fishing Work Amount",
+    Sandbox_DynamicColonies_ColonyFishingWorkAmount_tooltip = "Sets the total work required for a fishing worker to finish one catch roll. Higher values make each catch take longer unless the worker has better speed multipliers or active bait.",
+}
