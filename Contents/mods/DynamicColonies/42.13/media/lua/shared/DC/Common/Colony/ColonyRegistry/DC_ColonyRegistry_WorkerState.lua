@@ -221,7 +221,9 @@ function Registry.RecalculateWorker(worker)
         end
     end
 
-    local carryProfile = Config.GetScavengeCarryProfile and Config.GetScavengeCarryProfile(worker) or nil
+    local carryProfile = Config.GetWorkerCarryProfile and Config.GetWorkerCarryProfile(worker)
+        or (Config.GetScavengeCarryProfile and Config.GetScavengeCarryProfile(worker))
+        or nil
     local haulEffectiveWeight = Config.CalculateEffectiveCarryWeight and Config.CalculateEffectiveCarryWeight(haulRawWeight, carryProfile) or haulRawWeight
 
     worker.storedCalories = storedCalories

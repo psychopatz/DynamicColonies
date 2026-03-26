@@ -54,8 +54,16 @@ end
 function Config.GetItemCombinedTags(fullType)
     local tags = Internal.AppendUniqueValues({}, Config.FindItemTags(fullType))
     local scavengeProfile = Config.GetScavengeItemProfile(fullType)
+    local fishingProfile = Config.GetFishingItemProfile and Config.GetFishingItemProfile(fullType) or nil
+    local backpackProfile = Config.GetBackpackItemProfile and Config.GetBackpackItemProfile(fullType) or nil
     if scavengeProfile and scavengeProfile.labourTags then
         Internal.AppendUniqueValues(tags, scavengeProfile.labourTags)
+    end
+    if fishingProfile and fishingProfile.labourTags then
+        Internal.AppendUniqueValues(tags, fishingProfile.labourTags)
+    end
+    if backpackProfile and backpackProfile.labourTags then
+        Internal.AppendUniqueValues(tags, backpackProfile.labourTags)
     end
     if DC_Buildings and DC_Buildings.Config and DC_Buildings.Config.GetBuilderToolTags then
         Internal.AppendUniqueValues(tags, DC_Buildings.Config.GetBuilderToolTags(fullType))
@@ -77,7 +85,15 @@ function Config.IsColonyToolFullType(fullType)
         return true
     end
 
-    return Config.GetScavengeItemProfile(fullType) ~= nil
+    if Config.GetScavengeItemProfile(fullType) ~= nil then
+        return true
+    end
+
+    if Config.GetFishingItemProfile and Config.GetFishingItemProfile(fullType) ~= nil then
+        return true
+    end
+
+    return Config.GetBackpackItemProfile and Config.GetBackpackItemProfile(fullType) ~= nil
 end
 
 return Config

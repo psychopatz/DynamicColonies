@@ -75,16 +75,89 @@ Config.EquipmentRequirementDefinitions = Config.EquipmentRequirementDefinitions 
         autoEquip = true,
         sortOrder = 120,
     },
-    ["Tool.Fishing"] = {
-        label = "Fishing Gear",
-        hintText = "Fishing rod or spear",
-        reasonText = "Needed so the worker can fish instead of idling at the site.",
-        searchText = "fishing rod spear tackle",
-        supportedFullTypes = { "Base.FishingRod", "Base.CraftedFishingRod", "Base.FishingSpear" },
-        iconFullType = "Base.FishingRod",
+    ["Fish.Tool.Basic"] = {
+        label = "Fishing Tool",
+        hintText = "Fishing spear or fishing rod",
+        reasonText = "Needed so the worker can fish, with the spear serving as the renewable starter tool.",
+        searchText = "fishing spear crafted fishing rod fishing rod",
+        supportedFullTypes = { "Base.FishingSpear", "Base.CraftedFishingRod", "Base.FishingRod" },
+        iconFullType = "Base.FishingSpear",
         jobTypes = { "Fish" },
         autoEquip = true,
         sortOrder = 130,
+    },
+    ["Fish.Upgrade.Rod"] = {
+        label = "Fishing Rod",
+        hintText = "Crafted fishing rod or fishing rod",
+        reasonText = "A rod setup unlocks better fish and supports baited fishing.",
+        searchText = "crafted fishing rod fishing rod",
+        supportedFullTypes = { "Base.CraftedFishingRod", "Base.FishingRod" },
+        iconFullType = "Base.FishingRod",
+        jobTypes = { "Fish" },
+        autoEquip = false,
+        sortOrder = 131,
+    },
+    ["Fish.Upgrade.Line"] = {
+        label = "Fishing Line",
+        hintText = "Fishing line or premium fishing line",
+        reasonText = "A proper line is required before rod-based fishing can land larger catches.",
+        searchText = "fishing line premium fishing line",
+        supportedFullTypes = { "Base.FishingLine", "Base.PremiumFishingLine" },
+        iconFullType = "Base.FishingLine",
+        jobTypes = { "Fish" },
+        autoEquip = false,
+        sortOrder = 132,
+    },
+    ["Fish.Upgrade.Tackle"] = {
+        label = "Fishing Tackle",
+        hintText = "Hook, lure, bobber, or gaff",
+        reasonText = "Tackle improves the rod setup enough to target the biggest fish.",
+        searchText = "fishing hook lure bobber gaff tackle",
+        supportedFullTypes = {
+            "Base.FishingHook",
+            "Base.FishingHook_Bone",
+            "Base.FishingHook_Forged",
+            "Base.FishingHookBox",
+            "Base.Bobber",
+            "Base.JigLure",
+            "Base.MinnowLure",
+            "Base.Gaffhook"
+        },
+        iconFullType = "Base.FishingHook",
+        jobTypes = { "Fish" },
+        autoEquip = false,
+        sortOrder = 133,
+    },
+    ["Fish.Upgrade.Bait"] = {
+        label = "Fishing Bait",
+        hintText = "Worms, maggots, insects, leeches, or chum",
+        reasonText = "Bait speeds up rod fishing and improves bite consistency, but it can be consumed.",
+        searchText = "worm maggots cricket grasshopper leech tadpole bait fish chum",
+        supportedFullTypes = {
+            "Base.Worm",
+            "Base.Maggots",
+            "Base.Cricket",
+            "Base.Grasshopper",
+            "Base.Leech",
+            "Base.Tadpole",
+            "Base.BaitFish",
+            "Base.Chum"
+        },
+        iconFullType = "Base.Worm",
+        jobTypes = { "Fish" },
+        autoEquip = false,
+        sortOrder = 134,
+    },
+    ["Colony.Carry.Backpack"] = {
+        label = "Backpack",
+        hintText = "Any wearable bag with capacity and weight reduction",
+        reasonText = "A wearable backpack expands worker inventory capacity across every job.",
+        searchText = "wearable backpack duffel satchel hiking bag schoolbag",
+        supportedFullTypes = {},
+        iconFullType = "Base.Bag_Schoolbag",
+        jobTypes = { "Builder", "Doctor", "Farm", "Fish", "Scavenge" },
+        autoEquip = false,
+        sortOrder = 135,
     },
     ["Colony.Tool.Scavenge"] = {
         label = "Scavenging Tool",
@@ -115,7 +188,7 @@ Config.EquipmentRequirementDefinitions = Config.EquipmentRequirementDefinitions 
         searchText = "backpack duffel bag hauling",
         supportedFullTypes = { "Base.Bag_Schoolbag", "Base.Bag_DuffelBag", "Base.Bag_ToolBag" },
         iconFullType = "Base.Bag_Schoolbag",
-        jobTypes = { "Scavenge" },
+        jobTypes = {},
         autoEquip = true,
         sortOrder = 220,
     },
@@ -290,6 +363,12 @@ local function collectKnownEquipmentFullTypes()
     for fullType, _ in pairs(Config.ScavengeItemProfiles or {}) do
         appendUniqueStrings(fullTypes, { fullType })
     end
+
+    for fullType, _ in pairs(Config.FishingItemProfiles or {}) do
+        appendUniqueStrings(fullTypes, { fullType })
+    end
+
+    appendUniqueStrings(fullTypes, Config.GetKnownBackpackFullTypes and Config.GetKnownBackpackFullTypes() or nil)
 
     local builderToolFullTypes = DC_Buildings and DC_Buildings.Config and DC_Buildings.Config.BuilderToolFullTypes or nil
     for fullType, _ in pairs(builderToolFullTypes or {}) do
@@ -494,6 +573,45 @@ end
 
 function Config.GetProfile(profession)
     return Config.GetJobProfile(profession)
+end
+
+local function getWorkerSkillLevel(worker, skillID)
+    local skills = DC_Colony and DC_Colony.Skills or nil
+    local entry = skills and skills.GetSkillEntry and skills.GetSkillEntry(worker, skillID) or nil
+    return math.max(0, math.floor(tonumber(entry and entry.level) or 0))
+end
+
+function Config.GetWorkerJobCapability(worker, jobType)
+    local normalizedJobType = Config.NormalizeJobType(jobType)
+    local capability = {
+        capable = true,
+        reason = nil,
+        skillID = nil,
+        skillLevel = 0,
+    }
+
+    if normalizedJobType == ((Config.JobTypes or {}).Builder) then
+        capability.skillID = "Construction"
+        capability.skillLevel = getWorkerSkillLevel(worker, capability.skillID)
+        capability.capable = capability.skillLevel > 0
+        if not capability.capable then
+            capability.reason = "That worker has no Construction skill and cannot be assigned to Builder."
+        end
+    elseif normalizedJobType == ((Config.JobTypes or {}).Fish) then
+        capability.skillID = "Animals"
+        capability.skillLevel = getWorkerSkillLevel(worker, capability.skillID)
+        capability.capable = capability.skillLevel > 0
+        if not capability.capable then
+            capability.reason = "That worker has no Animals skill and cannot be assigned to Fishing."
+        end
+    end
+
+    return capability
+end
+
+function Config.CanWorkerTakeJob(worker, jobType)
+    local capability = Config.GetWorkerJobCapability(worker, jobType)
+    return capability.capable == true, capability.reason
 end
 
 function Config.GetDefaultJobForArchetype(archetypeID)

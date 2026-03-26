@@ -165,7 +165,9 @@ function Registry.GetHaulMetrics(worker)
         rawWeight = rawWeight + (Config.GetItemWeight(entry.fullType) * qty)
     end
 
-    local carryProfile = Config.GetScavengeCarryProfile and Config.GetScavengeCarryProfile(worker) or nil
+    local carryProfile = Config.GetWorkerCarryProfile and Config.GetWorkerCarryProfile(worker)
+        or (Config.GetScavengeCarryProfile and Config.GetScavengeCarryProfile(worker))
+        or nil
     local effectiveWeight = Config.CalculateEffectiveCarryWeight and Config.CalculateEffectiveCarryWeight(rawWeight, carryProfile) or rawWeight
     return {
         count = count,

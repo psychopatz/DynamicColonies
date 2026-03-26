@@ -30,6 +30,15 @@ local function entryMatchesToolTag(entry, requiredTag)
     return false
 end
 
+local function entryMatchesAnyToolTag(entry, requiredTags)
+    for _, requiredTag in ipairs(requiredTags or {}) do
+        if entryMatchesToolTag(entry, requiredTag) then
+            return true
+        end
+    end
+    return false
+end
+
 local function getBreakReason(entry)
     if entry and entry.isDrainable == true then
         return "ran empty"
@@ -197,6 +206,62 @@ local function findFirstMatchingUsableTool(worker, requiredTag)
         end
     end
     return nil, nil
+end
+
+local function findFirstMatchingUsableToolByTags(worker, requiredTags, preferredFullTypes)
+    local preferredRank = {}
+    for index, fullType in ipairs(preferredFullTypes or {}) do
+        preferredRank[tostring(fullType or "")] = index
+    end
+
+    local bestIndex = nil
+    local bestEntry = nil
+    local bestRank = math.huge
+    for index, entry in ipairs(worker and worker.toolLedger or {}) do
+        if Registry.Internal.IsEquipmentEntryUsable
+            and Registry.Internal.IsEquipmentEntryUsable(entry)
+            and entryMatchesAnyToolTag(entry, requiredTags) then
+            local rank = preferredRank[tostring(entry and entry.fullType or "")] or math.huge
+            if not bestEntry or rank < bestRank then
+                bestIndex = index
+                bestEntry = entry
+                bestRank = rank
+            end
+        end
+    end
+
+    return bestIndex, bestEntry
+end
+
+function Sim.FindUsableToolEntry(worker, requiredTags, preferredFullTypes)
+    return findFirstMatchingUsableToolByTags(worker, requiredTags, preferredFullTypes)
+end
+
+function Sim.ApplyWearToToolEntry(worker, index, currentHour, damageMultiplier)
+    local entry = worker and worker.toolLedger and worker.toolLedger[index] or nil
+    if not worker or not index or not entry then
+        return false, nil
+    end
+
+    local wornEntry = applyWearEvent(worker, entry, damageMultiplier)
+    if not wornEntry then
+        return false, nil
+    end
+
+    persistWearResult(worker, index, wornEntry, currentHour)
+    local updatedEntry = worker and worker.toolLedger and worker.toolLedger[index] or nil
+    return true, updatedEntry
+end
+
+function Sim.ConsumeToolEntry(worker, index)
+    local entry = worker and worker.toolLedger and worker.toolLedger[index] or nil
+    if not worker or not index or not entry then
+        return false, nil
+    end
+
+    table.remove(worker.toolLedger, index)
+    Registry.Internal.MarkToolCacheDirty(worker)
+    return true, entry
 end
 
 function Sim.ApplyWearForRequiredTools(worker, profile, currentHour, damageMultiplier)

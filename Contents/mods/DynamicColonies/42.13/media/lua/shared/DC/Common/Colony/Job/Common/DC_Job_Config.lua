@@ -64,10 +64,7 @@ Config.JobProfiles = {
         cycleHours = 18,
         dailyCaloriesNeed = 2100,
         dailyHydrationNeed = 1700,
-        outputRules = {
-            { tags = { "Food.Perishable.Fish" }, picks = 2, minQty = 1, maxQty = 2 },
-            { tags = { "Resource.Fishing" }, picks = 1, minQty = 1, maxQty = 1 }
-        }
+        outputRules = {}
     },
     Scavenge = {
         jobType = Config.JobTypes.Scavenge,

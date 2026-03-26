@@ -31,18 +31,19 @@ function Config.GetCarryContainerProfile(fullType)
         return nil
     end
 
-    local tags = Config.FindItemTags(fullType)
-    if not Config.HasMatchingTag(tags, "Container") then
-        return nil
-    end
-
     local capacity = 0
     local weightReduction = 0
+    local isContainer = false
+    local tags = Config.FindItemTags(fullType)
     local item = getScriptManager and getScriptManager():getItem(fullType) or nil
 
     if item then
         if item.getCapacity then
-            capacity = math.max(capacity, tonumber(item:getCapacity()) or 0)
+            local scriptCapacity = tonumber(item:getCapacity()) or 0
+            capacity = math.max(capacity, scriptCapacity)
+            if scriptCapacity > 0 then
+                isContainer = true
+            end
         end
         if item.getWeightReduction then
             local rawReduction = tonumber(item:getWeightReduction()) or 0
@@ -51,6 +52,14 @@ function Config.GetCarryContainerProfile(fullType)
             end
             weightReduction = math.max(weightReduction, rawReduction)
         end
+    end
+
+    if Config.HasMatchingTag(tags, "Container") then
+        isContainer = true
+    end
+
+    if not isContainer then
+        return nil
     end
 
     for sizeTag, fallbackCapacity in pairs(Config.CONTAINER_CAPACITY_BY_TAG or {}) do
@@ -97,14 +106,11 @@ function Config.CalculateEffectiveCarryWeight(rawWeight, carryProfile)
 end
 
 function Config.GetScavengeCarryProfile(worker)
-    local containers = {}
-    for _, entry in ipairs(worker and worker.toolLedger or {}) do
-        local fullType = entry and entry.fullType or nil
-        local container = Config.GetCarryContainerProfile(fullType)
-        if container then
-            containers[#containers + 1] = container
-        end
-    end
+    return Config.GetWorkerBackpackCarryProfile and Config.GetWorkerBackpackCarryProfile(worker) or nil
+end
+
+function Config.BuildCarryProfile(worker, containers)
+    containers = type(containers) == "table" and containers or {}
 
     table.sort(containers, function(a, b)
         local reductionA = tonumber(a and a.weightReduction) or 0
@@ -130,6 +136,23 @@ function Config.GetScavengeCarryProfile(worker)
         rawAllowance = rawAllowance,
         containers = containers
     }
+end
+
+function Config.GetLegacyScavengeCarryProfile(worker)
+    local containers = {}
+    for _, entry in ipairs(worker and worker.toolLedger or {}) do
+        local fullType = entry and entry.fullType or nil
+        local container = Config.GetCarryContainerProfile(fullType)
+        if container then
+            containers[#containers + 1] = container
+        end
+    end
+
+    return Config.BuildCarryProfile(worker, containers)
+end
+
+function Config.GetWorkerCarryProfile(worker)
+    return Config.GetWorkerBackpackCarryProfile and Config.GetWorkerBackpackCarryProfile(worker) or nil
 end
 
 return Config

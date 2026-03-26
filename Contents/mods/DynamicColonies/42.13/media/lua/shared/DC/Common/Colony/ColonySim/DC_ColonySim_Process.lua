@@ -88,6 +88,39 @@ function Sim.ProcessWorker(worker, currentHour)
         return
     end
 
+    local canTakeJob = true
+    local jobCapabilityReason = nil
+    if Config.CanWorkerTakeJob then
+        canTakeJob, jobCapabilityReason = Config.CanWorkerTakeJob(worker, normalizedJobType)
+    end
+    if canTakeJob == false then
+        if worker.jobCapabilityReason ~= jobCapabilityReason or worker.jobEnabled == true then
+            Internal.appendWorkerLog(
+                worker,
+                tostring(jobCapabilityReason or "This worker can no longer perform the assigned job."),
+                currentHour,
+                "jobs"
+            )
+        end
+        worker.jobCapabilityReason = jobCapabilityReason
+        worker.jobEnabled = false
+        worker.state = Config.States.Idle
+        worker.workProgress = 0
+        if normalizedJobType == Config.JobTypes.Fish then
+            worker.fishingTier = 0
+            worker.fishingTierLabel = Config.GetFishingTierLabel and Config.GetFishingTierLabel(0) or nil
+            worker.fishingCapabilities = {}
+            worker.fishingBaitActive = false
+            worker.fishingHasBackpack = false
+        end
+        if deltaHours > 0 then
+            worker.lastSimHour = currentHour
+        end
+        Registry.RecalculateWorker(worker)
+        return
+    end
+    worker.jobCapabilityReason = nil
+
     if Energy and Energy.IsDepleted and Energy.IsDepleted(worker) and not Energy.IsForcedRest(worker) then
         Energy.SetForcedRest(worker, true, lowEnergyReason, currentHour)
     end
@@ -190,6 +223,14 @@ function Sim.ProcessWorker(worker, currentHour)
         worker.scavengeFailureWeight = nil
         worker.scavengeSearchSpeedMultiplier = nil
         worker.scavengeCapabilities = nil
+    end
+
+    if normalizedJobType ~= Config.JobTypes.Fish then
+        worker.fishingTier = nil
+        worker.fishingTierLabel = nil
+        worker.fishingCapabilities = nil
+        worker.fishingBaitActive = nil
+        worker.fishingHasBackpack = nil
     end
 
     worker.siteState = worker.siteState or "Deferred"

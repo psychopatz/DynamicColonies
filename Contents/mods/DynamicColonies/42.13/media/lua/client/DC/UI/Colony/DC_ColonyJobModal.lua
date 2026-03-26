@@ -33,15 +33,9 @@ local function getJobDisplayColor(config, jobType)
     return { r = 0.9, g = 0.9, b = 0.9, a = 1 }
 end
 
-local function getConstructionLevel(worker)
-    local skills = DC_Colony and DC_Colony.Skills or nil
-    local entry = skills and skills.GetSkillEntry and skills.GetSkillEntry(worker, "Construction") or nil
-    return math.max(0, math.floor(tonumber(entry and entry.level) or 0))
-end
-
 local function canSelectJob(config, worker, normalizedJob)
-    if normalizedJob == tostring((config.JobTypes or {}).Builder or "Builder") then
-        return getConstructionLevel(worker) > 0
+    if config.CanWorkerTakeJob then
+        return config.CanWorkerTakeJob(worker, normalizedJob)
     end
     return true
 end

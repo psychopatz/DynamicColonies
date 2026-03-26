@@ -15,6 +15,7 @@ require "DC/Common/Colony/ColonyConfig/DC_ColonyConfig_Internal"
 require "DC/Common/Colony/ColonyConfig/DC_ColonyConfig_TimeSandbox"
 require "DC/Common/Colony/ColonyConfig/DC_ColonyConfig_Meals"
 require "DC/Common/Colony/ColonyConfig/DC_ColonyConfig_ItemTags"
+require "DC/Common/Colony/ColonyEquipment/Backpacks/DC_ColonyEquipment_Backpacks"
 require "DC/Common/Colony/ColonyConfig/DC_ColonyConfig_Carry"
 require "DC/Common/Colony/ColonyConfig/DC_ColonyConfig_Player"
 
