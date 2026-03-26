@@ -34,11 +34,22 @@ local function addInventoryItem(container, fullType, count, customData)
     if items and customData then
         for i = 0, items:size() - 1 do
             local item = items:get(i)
-            if customData.condition ~= nil and item.getConditionMax and item:getConditionMax() > 0 then
-                item:setCondition(math.max(0, math.min(item:getConditionMax(), math.floor(tonumber(customData.condition) or item:getConditionMax()))))
-            end
-            if customData.usedDelta ~= nil and item.IsDrainable and item:IsDrainable() then
-                item:setUsedDelta(math.max(0, math.min(1, tonumber(customData.usedDelta) or 0)))
+            if DC_Colony and DC_Colony.Registry and DC_Colony.Registry.Internal and DC_Colony.Registry.Internal.ApplyEquipmentEntryState then
+                DC_Colony.Registry.Internal.ApplyEquipmentEntryState(item, customData)
+            else
+                if customData.condition ~= nil and item.getConditionMax and item:getConditionMax() > 0 then
+                    item:setCondition(math.max(0, math.min(item:getConditionMax(), math.floor(tonumber(customData.condition) or item:getConditionMax()))))
+                end
+                if customData.usedDelta ~= nil and item.IsDrainable and item:IsDrainable() then
+                    item:setUsedDelta(math.max(0, math.min(1, tonumber(customData.usedDelta) or 0)))
+                end
+                if customData.headCondition ~= nil and item.setHeadCondition and item.getHeadConditionMax then
+                    item:setHeadCondition(math.max(0, math.min(item:getHeadConditionMax(), math.floor(tonumber(customData.headCondition) or item:getHeadConditionMax()))))
+                elseif customData.condition ~= nil and item.setHeadConditionFromCondition then
+                    pcall(function()
+                        item:setHeadConditionFromCondition(item)
+                    end)
+                end
             end
             if customData.fluidAmount ~= nil and item.getFluidContainer and item:getFluidContainer() then
                 item:getFluidContainer():setAmount(math.max(0, tonumber(customData.fluidAmount) or 0))

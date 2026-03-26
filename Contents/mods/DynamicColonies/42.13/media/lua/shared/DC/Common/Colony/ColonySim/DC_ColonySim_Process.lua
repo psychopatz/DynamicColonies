@@ -43,6 +43,8 @@ local function grantWorkerJobXP(worker, currentHour, skillEffects, totalQuantity
     )
 end
 
+Sim.grantWorkerJobXP = grantWorkerJobXP
+
 local function getBuildings()
     return DC_Buildings or nil
 end

@@ -63,7 +63,6 @@ local function buildGroupKey(entry, activeTab, side)
         tostring(entry.provisionType or ""),
         boolKey(entry.canDeposit),
         boolKey(entry.canAssignTool),
-        boolKey(entry.pending),
         normalizeTagKey(entry.tags),
         getDurabilityGroupKey(entry, activeTab),
     }

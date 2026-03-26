@@ -186,6 +186,34 @@ local function getDurabilityText(entry)
     return table.concat(parts, " | ")
 end
 
+local function getEquipmentConditionBarData(entry)
+    if type(entry) ~= "table" then
+        return nil
+    end
+
+    local conditionMax = math.max(0, tonumber(entry.conditionMax) or 0)
+    if conditionMax > 0 then
+        local condition = math.max(0, math.min(conditionMax, tonumber(entry.condition) or 0))
+        return {
+            fillPercent = math.max(0, math.min(1, condition / conditionMax)),
+            label = "Cond " .. tostring(math.floor(condition)) .. "/" .. tostring(conditionMax),
+        }
+    end
+
+    if entry.isDrainable == true then
+        local remaining = math.max(0, math.min(1, tonumber(entry.usedDelta) or 0))
+        return {
+            fillPercent = remaining,
+            label = "Charge " .. tostring(math.floor((remaining * 100) + 0.5)) .. "%",
+        }
+    end
+
+    return nil
+end
+
+Internal.getEquipmentConditionBarData = getEquipmentConditionBarData
+Internal.getEquipmentDurabilityText = getDurabilityText
+
 local function getOutputStateText(entry)
     if type(entry) ~= "table" or entry.fluidAmount == nil then
         return ""
@@ -287,23 +315,10 @@ function Internal.getPlayerEntryPresentation(entry, activeTab, worker, window)
     if Internal.isGroupEntry and Internal.isGroupEntry(entry) then
         if activeTab == Internal.Tabs.Equipment then
             local durabilityText = getDurabilityText(entry)
-            if entry.canAssignTool then
-                return {
-                    statText = appendWeightText(appendSegment(getGroupCountLabel(entry) .. " ready for assignment", durabilityText), entry),
-                    badgeText = "Tool",
-                    dimmed = false,
-                }
-            end
             return {
-                statText = appendWeightText(
-                    appendSegment(
-                        getGroupCountLabel(entry) .. ((entry.hasEquipmentRequirementMatch or durabilityText ~= "") and " not usable for labour" or " not a labour tool"),
-                        durabilityText
-                    ),
-                    entry
-                ),
-                badgeText = "Preview",
-                dimmed = true,
+                statText = appendWeightText(appendSegment(getGroupCountLabel(entry), durabilityText), entry),
+                badgeText = entry.canAssignTool and "Tool" or "Preview",
+                dimmed = entry.canAssignTool ~= true,
             }
         end
 
@@ -383,27 +398,10 @@ function Internal.getPlayerEntryPresentation(entry, activeTab, worker, window)
             Internal.ensurePlayerEntryEquipmentData(entry)
         end
         local durabilityText = getDurabilityText(entry)
-        if entry.canAssignTool then
-            local matchSummary = getEquipmentMatchSummary(entry, worker)
-            return {
-                statText = appendWeightText(
-                    appendSegment(matchSummary and ("Matches: " .. matchSummary) or "Relevant labour equipment", durabilityText),
-                    entry
-                ),
-                badgeText = "Tool",
-                dimmed = false,
-            }
-        end
         return {
-            statText = appendWeightText(
-                appendSegment(
-                    entry.hasEquipmentRequirementMatch and "Not usable for labour" or "Not a labour tool",
-                    durabilityText
-                ),
-                entry
-            ),
-            badgeText = "Preview",
-            dimmed = true,
+            statText = appendWeightText(durabilityText ~= "" and durabilityText or "No condition data", entry),
+            badgeText = entry.canAssignTool and "Tool" or "Preview",
+            dimmed = entry.canAssignTool ~= true,
         }
     end
 
@@ -509,14 +507,8 @@ function Internal.getWorkerEntryPresentation(entry, activeTab)
             }
         end
 
-        local tags = entry.tags or {}
-        local tagText = (#tags > 0) and table.concat(tags, ", ") or "Assigned labour tool"
-        if (tonumber(entry.qty) or 1) > 1 then
-            tagText = "Qty " .. tostring(entry.qty) .. " | " .. tagText
-        end
-        tagText = appendSegment(tagText, getDurabilityText(entry))
         return {
-            statText = appendWeightText(tagText, entry),
+            statText = appendWeightText(getDurabilityText(entry) ~= "" and getDurabilityText(entry) or "No condition data", entry),
             badgeText = "",
         }
     end

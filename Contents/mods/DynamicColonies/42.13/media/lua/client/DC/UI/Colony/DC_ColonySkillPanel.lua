@@ -75,6 +75,42 @@ local function getPrimarySkill(subject)
     return bestSkill
 end
 
+local function clamp(value, minimum, maximum)
+    local number = tonumber(value) or 0
+    if number < minimum then
+        return minimum
+    end
+    if number > maximum then
+        return maximum
+    end
+    return number
+end
+
+local function getBaseSkillSnapshot(archetypeID, identitySeed)
+    if not (DC_Colony and DC_Colony.Skills and DC_Colony.Skills.BuildPreviewSkillSnapshot) then
+        return nil
+    end
+    return DC_Colony.Skills.BuildPreviewSkillSnapshot(archetypeID, identitySeed)
+end
+
+local function getBaselineLevel(subject, skill)
+    local level = math.floor(tonumber(skill and skill.level) or 0)
+    local baseSkill = subject and subject.baseSkills and subject.baseSkills[skill and skill.id or ""] or nil
+    local baseLevel = math.floor(tonumber(baseSkill and baseSkill.level) or level)
+    return math.max(0, math.min(level, baseLevel))
+end
+
+local function getRemainingXPLabel(skill)
+    if not skill or skill.isCapped then
+        return "Cap reached"
+    end
+
+    local xpToNext = math.max(0, math.floor(tonumber(skill.xpToNext) or 0))
+    local currentXP = math.max(0, math.floor(tonumber(skill.xp) or 0))
+    local remainingXP = math.max(0, xpToNext - currentXP)
+    return tostring(remainingXP) .. " XP to next"
+end
+
 function DC_ColonySkillPanel:new(x, y, width, height)
     local o = ISPanel:new(x, y, width, height)
     setmetatable(o, self)
@@ -106,6 +142,7 @@ function DC_ColonySkillPanel:setWorkerData(worker)
         isFemale = worker.isFemale,
         identitySeed = worker.identitySeed,
         skills = worker.skills,
+        baseSkills = getBaseSkillSnapshot(worker.archetypeID or worker.profession or "General", worker.identitySeed),
         previewOnly = false,
         loading = type(worker.skills) ~= "table"
     }
@@ -127,6 +164,7 @@ function DC_ColonySkillPanel:setPreviewSubject(subject)
         isFemale = subject.isFemale,
         identitySeed = subject.identitySeed,
         skills = DC_Colony.Skills.BuildPreviewSkillSnapshot(subject.archetypeID, subject.identitySeed),
+        baseSkills = getBaseSkillSnapshot(subject.archetypeID, subject.identitySeed),
         previewOnly = true,
         loading = false
     }
@@ -140,36 +178,48 @@ function DC_ColonySkillPanel:drawMasteryIcon(x, y)
     self:drawRect(x + 6, y + 4, 3, 5, 0.95, 1.00, 0.82, 0.34)
 end
 
-function DC_ColonySkillPanel:drawSkillRow(skill, x, y, width, height)
+function DC_ColonySkillPanel:drawSkillRow(subject, skill, x, y, width, height)
     local barX = x + 190
     local barWidth = width - 200
-    local barHeight = height - 10
-    local barY = y + 5
+    local barHeight = 9
+    local barY = y + 7
     local level = math.floor(tonumber(skill.level) or 0)
+    local baselineLevel = getBaselineLevel(subject, skill)
+    local totalLevel = clamp(level, 0, 20)
+    local baseLevel = clamp(baselineLevel, 0, totalLevel)
+    local baseRatio = baseLevel / 20
+    local totalRatio = totalLevel / 20
     local hasMasteryCap = skill.perfectCap == true or (tonumber(skill.cap) or 0) >= 20
     local displayDash = level <= 0 and not hasMasteryCap
     local displayText = displayDash and "-" or tostring(level)
-    local barRatio = math.max(0, math.min(1, level / 20))
-    local barColor = hasMasteryCap and { r = 0.39, g = 0.56, b = 0.31 }
-        or { r = 0.24, g = 0.26, b = 0.28 }
+    local baseBarColor = { r = 0.42, g = 0.44, b = 0.47 }
+    local addedBarColor = { r = 0.44, g = 0.78, b = 0.98 }
     local valueColor = hasMasteryCap and { r = 0.95, g = 0.86, b = 0.35 }
         or { r = 0.88, g = 0.88, b = 0.88 }
+    local remainingXPLabel = getRemainingXPLabel(skill)
 
-    self:drawText(skill.label, x + 4, y + 5, 0.92, 0.92, 0.92, 1, UIFont.Small)
+    self:drawText(skill.label, x + 4, y + 4, 0.92, 0.92, 0.92, 1, UIFont.Small)
 
     if hasMasteryCap then
         self:drawMasteryIcon(x + 138, y + 1)
     end
 
-    self:drawTextRight(displayText, x + 182, y + 5, valueColor.r, valueColor.g, valueColor.b, 1, UIFont.Small)
+    self:drawTextRight(displayText, x + 182, y + 4, valueColor.r, valueColor.g, valueColor.b, 1, UIFont.Small)
 
     if not displayDash then
         self:drawRect(barX, barY, barWidth, barHeight, 0.42, 0.16, 0.17, 0.18)
-        local fillWidth = math.floor(barWidth * barRatio)
-        if fillWidth > 0 then
-            self:drawRect(barX, barY, fillWidth, barHeight, 0.92, barColor.r, barColor.g, barColor.b)
+        local baseFillWidth = math.floor(barWidth * baseRatio)
+        local totalFillWidth = math.floor(barWidth * totalRatio)
+        local addedFillWidth = math.max(0, totalFillWidth - baseFillWidth)
+        if baseFillWidth > 0 then
+            self:drawRect(barX, barY, baseFillWidth, barHeight, 0.92, baseBarColor.r, baseBarColor.g, baseBarColor.b)
+        end
+        if addedFillWidth > 0 then
+            self:drawRect(barX + baseFillWidth, barY, addedFillWidth, barHeight, 0.95, addedBarColor.r, addedBarColor.g, addedBarColor.b)
         end
     end
+
+    self:drawTextRight(remainingXPLabel, x + width - 4, y + 18, 0.70, 0.78, 0.94, 1, UIFont.Small)
 end
 
 function DC_ColonySkillPanel:prerender()
@@ -225,13 +275,13 @@ function DC_ColonySkillPanel:prerender()
     end
 
     local rowY = titleY + 26
-    local rowHeight = 24
-    local rowGap = 3
+    local rowHeight = 32
+    local rowGap = 4
     local rowWidth = self.width - (pad * 2)
     for _, skillID in ipairs(DISPLAY_ORDER) do
         local skill = subject.skills and subject.skills[skillID] or nil
         if skill then
-            self:drawSkillRow(skill, pad, rowY, rowWidth, rowHeight)
+            self:drawSkillRow(subject, skill, pad, rowY, rowWidth, rowHeight)
         end
         rowY = rowY + rowHeight + rowGap
     end

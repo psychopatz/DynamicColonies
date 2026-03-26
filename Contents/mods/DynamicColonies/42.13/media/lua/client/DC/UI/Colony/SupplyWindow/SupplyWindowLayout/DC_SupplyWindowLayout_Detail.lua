@@ -11,6 +11,15 @@ local function appendWeightLine(text, entry)
     return text .. " <RGB:0.82,0.82,0.82> Weight: <RGB:1,1,1> " .. Internal.formatWeightValue(weight) .. " <LINE> "
 end
 
+local function appendConditionLine(text, entry)
+    local durabilityText = Internal.getEquipmentDurabilityText and Internal.getEquipmentDurabilityText(entry) or ""
+    if tostring(durabilityText or "") == "" then
+        return text
+    end
+
+    return text .. " <RGB:0.82,0.82,0.82> Condition: <RGB:1,1,1> " .. tostring(durabilityText) .. " <LINE> "
+end
+
 local function setDetailSupportPanel(window, title, entries)
     if not window or not window.detailSupportPanel then
         return
@@ -100,17 +109,15 @@ function DC_SupplyWindow:updateItemDetail(entry, side)
         text = text .. " <RGB:0.82,0.82,0.82> Item: <RGB:1,1,1> " .. tostring(Internal.formatEntryLabel(entry)) .. " <LINE> "
         if Internal.isGroupEntry and Internal.isGroupEntry(entry) then
             setDetailSupportPanel(self, "", {})
-            text = appendWeightLine(text, entry)
             text = text .. " <RGB:0.82,0.82,0.82> Group Size: <RGB:1,1,1> " .. tostring(entry.childCount or 0) .. " entries <LINE> "
-            text = text .. " <RGB:0.82,0.82,0.82> Full Type: <RGB:1,1,1> " .. tostring(entry.fullType or "Mixed") .. " <LINE> "
             if self.activeTab == Internal.Tabs.Output then
+                text = appendWeightLine(text, entry)
                 text = text .. " <RGB:0.82,0.82,0.82> Total Quantity: <RGB:1,1,1> " .. tostring(entry.totalQty or entry.qty or 0) .. " <LINE> "
             elseif self.activeTab == Internal.Tabs.Equipment then
-                local tags = entry.tags or {}
-                text = text .. " <RGB:0.82,0.82,0.82> Tool Tags: <RGB:1,1,1> "
-                    .. ((#tags > 0 and table.concat(tags, ", ")) or "None")
-                    .. " <LINE> "
+                text = appendWeightLine(text, entry)
+                text = appendConditionLine(text, entry)
             else
+                text = appendWeightLine(text, entry)
                 text = text .. " <RGB:0.82,0.82,0.82> Total Calories: <RGB:1,1,1> " .. string.format("%.0f", entry.calories or 0) .. " <LINE> "
                 text = text .. " <RGB:0.82,0.82,0.82> Total Hydration: <RGB:1,1,1> " .. string.format("%.0f", entry.hydration or 0) .. " <LINE> "
                 if (tonumber(entry.treatmentUnits) or 0) > 0 then
@@ -133,10 +140,7 @@ function DC_SupplyWindow:updateItemDetail(entry, side)
             -- Group details were already rendered above.
         elseif self.activeTab == Internal.Tabs.Equipment then
             text = appendWeightLine(text, entry)
-            local tags = entry.tags or {}
-            text = text .. " <RGB:0.82,0.82,0.82> Tool Tags: <RGB:1,1,1> "
-                .. ((#tags > 0 and table.concat(tags, ", ")) or "None")
-                .. " <LINE> "
+            text = appendConditionLine(text, entry)
         elseif self.activeTab == Internal.Tabs.Output then
             text = text .. " <RGB:0.82,0.82,0.82> Quantity: <RGB:1,1,1> " .. tostring(entry.qty or 1) .. " <LINE> "
             text = appendWeightLine(text, entry)
@@ -164,16 +168,14 @@ function DC_SupplyWindow:updateItemDetail(entry, side)
         text = text .. " <RGB:0.82,0.82,0.82> Item: <RGB:1,1,1> " .. tostring(Internal.formatEntryLabel(entry)) .. " <LINE> "
         if Internal.isGroupEntry and Internal.isGroupEntry(entry) then
             text = text .. " <RGB:0.82,0.82,0.82> Group Size: <RGB:1,1,1> " .. tostring(entry.childCount or 0) .. " entries <LINE> "
-            text = text .. " <RGB:0.82,0.82,0.82> Full Type: <RGB:1,1,1> " .. tostring(entry.fullType or "Unknown") .. " <LINE> "
-            text = appendWeightLine(text, entry)
             if self.activeTab == Internal.Tabs.Equipment then
-                local tags = entry.tags or {}
-                text = text .. " <RGB:0.82,0.82,0.82> Tool Tags: <RGB:1,1,1> "
-                    .. ((#tags > 0 and table.concat(tags, ", ")) or "None")
-                    .. " <LINE> "
+                text = appendWeightLine(text, entry)
+                text = appendConditionLine(text, entry)
             elseif self.activeTab == Internal.Tabs.Output and Internal.isWarehouseView and Internal.isWarehouseView(self) then
+                text = appendWeightLine(text, entry)
                 text = text .. " <RGB:0.82,0.82,0.82> Total Quantity: <RGB:1,1,1> " .. tostring(entry.totalQty or entry.qty or 0) .. " <LINE> "
             else
+                text = appendWeightLine(text, entry)
                 text = text .. " <RGB:0.82,0.82,0.82> Total Calories: <RGB:1,1,1> " .. string.format("%.0f", entry.calories or 0) .. " <LINE> "
                 text = text .. " <RGB:0.82,0.82,0.82> Total Hydration: <RGB:1,1,1> " .. string.format("%.0f", entry.hydration or 0) .. " <LINE> "
                 if (tonumber(entry.treatmentUnits) or 0) > 0 then
@@ -191,11 +193,7 @@ function DC_SupplyWindow:updateItemDetail(entry, side)
             -- Group details were already rendered above.
         elseif self.activeTab == Internal.Tabs.Equipment then
             text = appendWeightLine(text, entry)
-            local tags = entry.tags or {}
-            text = text .. " <RGB:0.82,0.82,0.82> Tool Tags: <RGB:1,1,1> "
-                .. ((#tags > 0 and table.concat(tags, ", ")) or "None")
-                .. " <LINE> "
-            text = text .. " <RGB:0.82,0.82,0.82> Worker Still Needs: <RGB:1,1,1> " .. Internal.getMissingEquipmentSummary(self.workerData, 99) .. " <LINE> "
+            text = appendConditionLine(text, entry)
         elseif self.activeTab == Internal.Tabs.Output and Internal.isWarehouseView and Internal.isWarehouseView(self) then
             text = appendWeightLine(text, entry)
             text = text .. " <RGB:0.82,0.82,0.82> Action: <RGB:1,1,1> Use Store to place this item in warehouse storage for construction and general item use. <LINE> "

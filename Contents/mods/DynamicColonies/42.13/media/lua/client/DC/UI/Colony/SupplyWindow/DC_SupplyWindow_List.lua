@@ -44,11 +44,21 @@ function ColonySupplyList:new(x, y, width, height, mode)
     local o = ISScrollingListBox:new(x, y, width, height)
     setmetatable(o, self)
     self.__index = self
-    o.itemheight = 46
+    o.itemheight = 54
     o.selected = -1
     o.font = UIFont.Small
     o.mode = mode or "player"
     return o
+end
+
+local function getConditionBarColor(fillPercent)
+    if fillPercent >= 0.66 then
+        return 0.34, 0.8, 0.38
+    end
+    if fillPercent >= 0.33 then
+        return 0.88, 0.7, 0.24
+    end
+    return 0.84, 0.28, 0.22
 end
 
 function ColonySupplyList:onMouseDown(x, y)
@@ -150,6 +160,10 @@ function ColonySupplyList:doDrawItem(y, item, alt)
     local titleBaseMaxWidth = math.max(20, textMaxWidth - suffixWidth)
     local titleText = fitTextToWidth(UIFont.Small, titleBaseText, titleBaseMaxWidth)
     local statText = fitTextToWidth(UIFont.Small, presentation.statText or "", textMaxWidth)
+    local conditionBar = activeTab == Internal.Tabs.Equipment
+        and Internal.getEquipmentConditionBarData
+        and Internal.getEquipmentConditionBarData(entry)
+        or nil
 
     self:drawText(titleText, textX, y + 5, textR, textG, textB, 1, UIFont.Small)
     if titleSuffixText ~= "" then
@@ -160,7 +174,23 @@ function ColonySupplyList:doDrawItem(y, item, alt)
         local suffixA = presentation.dimmed and 0.9 or 1
         self:drawText(titleSuffixText, suffixX, y + 5, suffixR, suffixG, suffixB, suffixA, UIFont.Small)
     end
-    self:drawText(statText, textX, y + 23, 0.65, 0.8, 0.95, 1, UIFont.Small)
+    self:drawText(statText, textX, y + 22, 0.65, 0.8, 0.95, 1, UIFont.Small)
+    if conditionBar then
+        local barY = y + 39
+        local barHeight = 8
+        local barWidth = math.max(60, textMaxWidth)
+        local fillPercent = math.max(0, math.min(1, tonumber(conditionBar.fillPercent) or 0))
+        local alpha = presentation.dimmed and 0.4 or 0.7
+        local fillR, fillG, fillB = getConditionBarColor(fillPercent)
+
+        self:drawRect(textX, barY, barWidth, barHeight, alpha, 0.08, 0.08, 0.08)
+        self:drawRectBorder(textX, barY, barWidth, barHeight, 0.35, 1, 1, 1)
+
+        local fillWidth = math.max(0, math.floor((barWidth - 2) * fillPercent))
+        if fillWidth > 0 then
+            self:drawRect(textX + 1, barY + 1, fillWidth, barHeight - 2, presentation.dimmed and 0.35 or 0.85, fillR, fillG, fillB)
+        end
+    end
     if badgeText ~= "" then
         self:drawTextRight(badgeText, width - rightPadding, y + 5, badgeR, badgeG, badgeB, 1, UIFont.Small)
     end

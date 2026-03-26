@@ -261,6 +261,30 @@ function Internal.ApplyEquipmentEntryState(item, entry)
         item:setUsedDelta(math.max(0, math.min(1, tonumber(entry.usedDelta) or 0)))
     end
 
+    if item.hasHeadCondition and item:hasHeadCondition() then
+        if entry.headCondition ~= nil and item.setHeadCondition and item.getHeadConditionMax then
+            item:setHeadCondition(math.max(0, math.min(item:getHeadConditionMax(), math.floor(tonumber(entry.headCondition) or item:getHeadConditionMax()))))
+        elseif item.setHeadConditionFromCondition then
+            pcall(function()
+                item:setHeadConditionFromCondition(item)
+            end)
+        end
+
+        if item.setConditionFromHeadCondition then
+            pcall(function()
+                item:setConditionFromHeadCondition(item)
+            end)
+        end
+    end
+
+    if entry.quality ~= nil and item.setQuality then
+        item:setQuality(math.max(0, math.floor(tonumber(entry.quality) or 0)))
+    end
+
+    if entry.haveBeenRepaired ~= nil and item.setHaveBeenRepaired then
+        item:setHaveBeenRepaired(math.max(0, math.floor(tonumber(entry.haveBeenRepaired) or 0)))
+    end
+
     return item
 end
 
@@ -294,6 +318,23 @@ function Internal.NormalizeEquipmentEntry(entry)
         condition = conditionMax
     end
 
+    local hasHeadCondition = tempItem and tempItem.hasHeadCondition and tempItem:hasHeadCondition() or false
+    local headConditionMax = hasHeadCondition and tempItem.getHeadConditionMax and tempItem:getHeadConditionMax() or 0
+    local headCondition = tonumber(entry.headCondition)
+    if headCondition == nil and hasHeadCondition and tempItem and tempItem.getHeadCondition then
+        headCondition = tempItem:getHeadCondition()
+    end
+
+    local quality = tonumber(entry.quality)
+    if quality == nil and tempItem and tempItem.getQuality then
+        quality = tempItem:getQuality()
+    end
+
+    local haveBeenRepaired = tonumber(entry.haveBeenRepaired)
+    if haveBeenRepaired == nil and tempItem and tempItem.getHaveBeenRepaired then
+        haveBeenRepaired = tempItem:getHaveBeenRepaired()
+    end
+
     return {
         fullType = fullType,
         displayName = tostring(entry.displayName or Internal.GetDisplayNameForFullType(fullType)),
@@ -301,9 +342,13 @@ function Internal.NormalizeEquipmentEntry(entry)
         qty = 1,
         condition = conditionMax > 0 and math.max(0, math.min(conditionMax, math.floor(condition or conditionMax))) or nil,
         conditionMax = conditionMax > 0 and conditionMax or nil,
+        headCondition = headConditionMax > 0 and math.max(0, math.min(headConditionMax, math.floor(headCondition or headConditionMax))) or nil,
+        headConditionMax = headConditionMax > 0 and headConditionMax or nil,
         isDrainable = isDrainable == true,
         useDelta = isDrainable and math.max(0, tonumber(useDelta) or 0) or nil,
         usedDelta = isDrainable and math.max(0, math.min(1, tonumber(usedDelta) or 0)) or nil,
+        quality = quality ~= nil and math.max(0, math.floor(tonumber(quality) or 0)) or nil,
+        haveBeenRepaired = haveBeenRepaired ~= nil and math.max(0, math.floor(tonumber(haveBeenRepaired) or 0)) or nil,
         keepOnDeplete = resolveKeepOnDeplete(tempItem, scriptItem),
     }
 end
@@ -320,6 +365,9 @@ function Internal.BuildEquipmentEntryFromInventoryItem(invItem, overrideDisplayN
             or (Config.FindItemTags and Config.FindItemTags(invItem:getFullType()))
             or {},
         condition = invItem.getCondition and invItem:getCondition() or nil,
+        headCondition = invItem.getHeadCondition and invItem:getHeadCondition() or nil,
+        quality = invItem.getQuality and invItem:getQuality() or nil,
+        haveBeenRepaired = invItem.getHaveBeenRepaired and invItem:getHaveBeenRepaired() or nil,
         usedDelta = invItem.getCurrentUsesFloat and invItem:getCurrentUsesFloat()
             or invItem.getUsedDelta and invItem:getUsedDelta()
             or nil,
@@ -336,8 +384,17 @@ function Internal.BuildEquipmentAddItemCustomData(entry)
     if normalized.condition ~= nil then
         customData.condition = normalized.condition
     end
+    if normalized.headCondition ~= nil then
+        customData.headCondition = normalized.headCondition
+    end
     if normalized.usedDelta ~= nil then
         customData.usedDelta = normalized.usedDelta
+    end
+    if normalized.quality ~= nil then
+        customData.quality = normalized.quality
+    end
+    if normalized.haveBeenRepaired ~= nil then
+        customData.haveBeenRepaired = normalized.haveBeenRepaired
     end
     return customData
 end

@@ -7,6 +7,7 @@ local Config = DC_Colony.Config
 local Skills = DC_Colony.Skills
 
 local HASH_MOD = 2147483647
+local MIN_MAINTENANCE_LEVEL = 1
 
 local function deepCopy(value)
     if type(value) ~= "table" then
@@ -71,6 +72,13 @@ local function isSecondarySkill(profile, skillID)
     return false
 end
 
+local function getMinimumResolvedLevel(skillID)
+    if tostring(skillID or "") == "Maintenance" then
+        return MIN_MAINTENANCE_LEVEL
+    end
+    return 0
+end
+
 function Skills.GetXPToNextLevel(level)
     local safeLevel = math.max(0, math.floor(tonumber(level) or 0))
     return math.floor(100 + (safeLevel * 50) + (safeLevel * safeLevel * 10))
@@ -125,7 +133,7 @@ function Skills.ResolvePreviewSkills(archetypeID, identitySeed)
             levelMin,
             levelMax
         )
-        level = math.max(0, math.min(level, cap))
+        level = math.max(getMinimumResolvedLevel(skillID), math.min(level, cap))
 
         preview[skillID] = {
             id = skillID,
@@ -163,11 +171,12 @@ function Skills.EnsureWorkerSkills(worker)
         local cap = math.max(1, math.min(20, math.floor(tonumber(previewEntry.cap) or 10)))
         local level = storedEntry and storedEntry.level or previewEntry.level or 0
         local xp = storedEntry and storedEntry.xp or previewEntry.xp or 0
+        local minimumLevel = math.min(cap, getMinimumResolvedLevel(skillID))
 
         normalized[skillID] = {
             id = skillID,
             label = getSkillLabel(skillID),
-            level = math.floor(clamp(level, 0, cap)),
+            level = math.floor(clamp(level, minimumLevel, cap)),
             xp = math.max(0, math.floor(tonumber(xp) or 0)),
             cap = cap,
             xpRate = math.max(0.1, tonumber(storedEntry and storedEntry.xpRate or previewEntry.xpRate) or 1.0),
