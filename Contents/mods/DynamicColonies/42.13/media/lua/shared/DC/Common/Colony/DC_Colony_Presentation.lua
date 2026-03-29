@@ -13,6 +13,7 @@ if isClient() and not isServer() then
 end
 
 Presentation.tickCounter = Presentation.tickCounter or 0
+Presentation.legacyProjectionCleanupComplete = Presentation.legacyProjectionCleanupComplete or false
 
 local function getActivePlayers()
     if DTNPCManager and DTNPCManager.GetActivePlayers then
@@ -35,8 +36,19 @@ local function getActivePlayers()
     return players
 end
 
+local function isLegacyProjectionRuntimeEnabled()
+    return Config and Config.ENABLE_LEGACY_WORKER_PROJECTIONS == true
+end
+
+local function canManageProjectionRuntime()
+    return DTNPCServerCore and DTNPCServerCore.FindZombieByUUID
+end
+
 local function isProjectionRuntimeAvailable()
-    return DTNPCServerCore and DTNPCServerCore.RespawnNPC and DTNPCServerCore.FindZombieByUUID
+    return isLegacyProjectionRuntimeEnabled()
+        and DTNPCServerCore
+        and DTNPCServerCore.RespawnNPC
+        and DTNPCServerCore.FindZombieByUUID
 end
 
 local function pruneProjectionRegistration(uuid, zombie)
@@ -103,7 +115,7 @@ function Presentation.BuildProjectionData(worker)
 end
 
 function Presentation.RemoveProjection(worker)
-    if not isProjectionRuntimeAvailable() or not worker then return end
+    if not canManageProjectionRuntime() or not worker then return end
 
     local uuid = Config.GetProjectionUUID(worker.workerID)
     local zombie = DTNPCServerCore.FindZombieByUUID(uuid)
@@ -115,6 +127,22 @@ function Presentation.RemoveProjection(worker)
     if DTNPCManager and DTNPCManager.RemoveData then
         DTNPCManager.RemoveData(uuid, nil, nil, nil, "labour-projection")
     end
+end
+
+local function cleanupLegacyProjections()
+    if Presentation.legacyProjectionCleanupComplete then
+        return
+    end
+
+    Presentation.legacyProjectionCleanupComplete = true
+
+    if not Registry or not Registry.ForEachWorkerRaw then
+        return
+    end
+
+    Registry.ForEachWorkerRaw(function(worker)
+        Presentation.RemoveProjection(worker)
+    end)
 end
 
 local function canProjectWorker(worker)
@@ -198,6 +226,11 @@ function Presentation.OnTick()
     end
 
     Presentation.tickCounter = 0
+    if not isLegacyProjectionRuntimeEnabled() then
+        cleanupLegacyProjections()
+        return
+    end
+
     Presentation.SyncAllWorkers()
 end
 
