@@ -5,6 +5,9 @@ local Internal = DC_SupplyWindow.Internal
 
 local function getRequirementDefinitions(worker)
     local config = Internal.Config or {}
+    if config.GetWorkerEquipmentRequirementDefinitions then
+        return config.GetWorkerEquipmentRequirementDefinitions(worker) or {}
+    end
     if config.GetEquipmentRequirementDefinitions then
         return config.GetEquipmentRequirementDefinitions(worker and worker.jobType) or {}
     end
@@ -84,7 +87,7 @@ function Internal.getMissingEquipmentSummary(worker, maxCount)
         if normalizedJob == ((config.JobTypes or {}).Scavenge) then
             return "Scavenger loadout ready"
         end
-        return "Required tools already equipped"
+        return "Required equipment already equipped"
     end
 
     local limit = math.max(1, math.floor(tonumber(maxCount) or 3))
@@ -104,7 +107,7 @@ end
 function Internal.getRequiredToolSummary(worker)
     local definitions = getRequirementDefinitions(worker)
     if #definitions <= 0 then
-        return "Any labour tool"
+        return "Any equipment"
     end
 
     local labels = {}

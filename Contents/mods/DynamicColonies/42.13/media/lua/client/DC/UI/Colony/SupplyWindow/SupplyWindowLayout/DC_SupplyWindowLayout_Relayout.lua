@@ -62,6 +62,20 @@ function DC_SupplyWindow:relayout()
         self.btnDropSelected:setHeight(32)
     end
 
+    if self.btnAutoEquipNow then
+        self.btnAutoEquipNow:setX(layout.controlX)
+        self.btnAutoEquipNow:setY(layout.centerButtonsY + 200)
+        self.btnAutoEquipNow:setWidth(layout.controlWidth)
+        self.btnAutoEquipNow:setHeight(32)
+    end
+
+    if self.btnAutoEquipToggle then
+        self.btnAutoEquipToggle:setX(layout.controlX)
+        self.btnAutoEquipToggle:setY(layout.centerButtonsY + 240)
+        self.btnAutoEquipToggle:setWidth(layout.controlWidth)
+        self.btnAutoEquipToggle:setHeight(32)
+    end
+
     self.playerList:setX(layout.leftX)
     self.playerList:setY(layout.contentY)
     self.playerList:setWidth(layout.leftWidth)

@@ -335,6 +335,11 @@ function Internal.NormalizeEquipmentEntry(entry)
         haveBeenRepaired = tempItem:getHaveBeenRepaired()
     end
 
+    local assignedRequirementKey = tostring(entry.assignedRequirementKey or "")
+    if assignedRequirementKey == "" then
+        assignedRequirementKey = nil
+    end
+
     return {
         fullType = fullType,
         displayName = tostring(entry.displayName or Internal.GetDisplayNameForFullType(fullType)),
@@ -351,10 +356,11 @@ function Internal.NormalizeEquipmentEntry(entry)
         haveBeenRepaired = haveBeenRepaired ~= nil and math.max(0, math.floor(tonumber(haveBeenRepaired) or 0)) or nil,
         keepOnDeplete = resolveKeepOnDeplete(tempItem, scriptItem),
         pendingVanillaBreak = entry.pendingVanillaBreak == true,
+        assignedRequirementKey = assignedRequirementKey,
     }
 end
 
-function Internal.BuildEquipmentEntryFromInventoryItem(invItem, overrideDisplayName)
+function Internal.BuildEquipmentEntryFromInventoryItem(invItem, overrideDisplayName, sourceEntry)
     if not invItem or not invItem.getFullType then
         return nil
     end
@@ -372,6 +378,7 @@ function Internal.BuildEquipmentEntryFromInventoryItem(invItem, overrideDisplayN
         usedDelta = invItem.getCurrentUsesFloat and invItem:getCurrentUsesFloat()
             or invItem.getUsedDelta and invItem:getUsedDelta()
             or nil,
+        assignedRequirementKey = sourceEntry and sourceEntry.assignedRequirementKey or nil,
     })
 end
 

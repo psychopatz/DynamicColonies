@@ -1,4 +1,4 @@
-name=Dynamic Colonies
+name=Dynamic Trading - Colonies
 id=DynamicColonies
 description=Colony building system addon for Dynamic Trading.
 require=\DynamicTradingCommon

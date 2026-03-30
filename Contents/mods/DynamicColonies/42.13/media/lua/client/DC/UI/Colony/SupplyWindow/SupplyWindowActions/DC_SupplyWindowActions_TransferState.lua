@@ -46,6 +46,7 @@ function DC_SupplyWindow:updateTransferControls()
     local activeTab = self.activeTab or Internal.Tabs.Provisions
     local transferAllowed = self:canTransferWithWorker(false)
     local isWarehouseOutputTab = activeTab == Internal.Tabs.Output and Internal.isWarehouseView and Internal.isWarehouseView(self)
+    local autoEquipControlsVisible = self.isAutoEquipControlVisible and self:isAutoEquipControlVisible()
     local depositEnabled = transferAllowed and (activeTab ~= Internal.Tabs.Output or isWarehouseOutputTab)
     local hasWorkerEntries = #(self.workerEntries or {}) > 0
     local dropEnabled = canDropHaulEntries(self) and hasWorkerEntries
@@ -58,13 +59,24 @@ function DC_SupplyWindow:updateTransferControls()
         self.btnDropSelected:setVisible(canDropHaulEntries(self))
         self.btnDropSelected:setEnable(dropEnabled)
     end
+    if self.btnAutoEquipNow then
+        self.btnAutoEquipNow:setVisible(autoEquipControlsVisible)
+        self.btnAutoEquipNow:setEnable(autoEquipControlsVisible and transferAllowed)
+        self.btnAutoEquipNow:setTitle("Auto Equip")
+    end
+    if self.btnAutoEquipToggle then
+        local autoEquipEnabled = self.getWarehouseAutoEquipEnabled and self:getWarehouseAutoEquipEnabled()
+        self.btnAutoEquipToggle:setVisible(autoEquipControlsVisible)
+        self.btnAutoEquipToggle:setEnable(autoEquipControlsVisible)
+        self.btnAutoEquipToggle:setTitle(autoEquipEnabled and "Auto On" or "Auto Off")
+    end
 
     if activeTab == Internal.Tabs.Equipment then
-        self.btnDepositSelected:setTitle("Use")
-        self.btnDepositVisible:setTitle("All")
+        self.btnDepositSelected:setTitle(">")
+        self.btnDepositVisible:setTitle(">>")
     elseif isWarehouseOutputTab then
-        self.btnDepositSelected:setTitle("Store")
-        self.btnDepositVisible:setTitle("Store All")
+        self.btnDepositSelected:setTitle(">")
+        self.btnDepositVisible:setTitle(">>")
     else
         self.btnDepositSelected:setTitle(">")
         self.btnDepositVisible:setTitle(">>")

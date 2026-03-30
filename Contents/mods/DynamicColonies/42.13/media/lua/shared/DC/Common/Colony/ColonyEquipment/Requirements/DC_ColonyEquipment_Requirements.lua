@@ -30,6 +30,27 @@ local function cloneStringArray(values)
     return appendUniqueStrings({}, values)
 end
 
+local function getWorkerSkillLevel(worker, skillID)
+    local skills = DC_Colony and DC_Colony.Skills or nil
+    local entry = skills and skills.GetSkillEntry and skills.GetSkillEntry(worker, skillID) or nil
+    return math.max(0, math.floor(tonumber(entry and entry.level) or 0))
+end
+
+local function filterDefinitionsForWorker(definitions, worker)
+    if type(worker) ~= "table" then
+        return definitions or {}
+    end
+
+    local filtered = {}
+    for _, definition in ipairs(definitions or {}) do
+        if Config.CanWorkerUseEquipmentRequirement == nil
+            or Config.CanWorkerUseEquipmentRequirement(worker, definition and definition.requirementKey) then
+            filtered[#filtered + 1] = definition
+        end
+    end
+    return filtered
+end
+
 local function getEquipmentRequirementCache()
     local cache = Config.__equipmentRequirementCache or {}
     cache.definitionByKey = cache.definitionByKey or {}
@@ -164,9 +185,48 @@ Config.EquipmentRequirementDefinitions = Config.EquipmentRequirementDefinitions 
         searchText = "wearable backpack duffel satchel hiking bag schoolbag",
         supportedFullTypes = {},
         iconFullType = "Base.Bag_Schoolbag",
-        jobTypes = { "Builder", "Doctor", "Farm", "Fish", "Scavenge" },
+        allJobTypes = true,
         autoEquip = false,
         sortOrder = 135,
+    },
+    ["Colony.Combat.Melee"] = {
+        label = "Melee",
+        hintText = "Any melee weapon the companion can fight with",
+        reasonText = "Keeps a combat-capable worker ready for close fights during survival encounters.",
+        searchText = "melee weapon blade blunt spear axe knife bat",
+        supportedFullTypes = {},
+        iconFullType = "Base.BaseballBat",
+        requirementTags = { "Weapon.Melee" },
+        allJobTypes = true,
+        combatCapability = "melee",
+        autoEquip = false,
+        sortOrder = 136,
+    },
+    ["Colony.Combat.Ranged"] = {
+        label = "Ranged",
+        hintText = "Any firearm the companion can shoot",
+        reasonText = "Keeps a shooting-capable worker ready for ranged combat when needed.",
+        searchText = "ranged firearm pistol revolver shotgun rifle gun",
+        supportedFullTypes = {},
+        iconFullType = "Base.Pistol",
+        requirementTags = { "Weapon.Ranged.Firearm" },
+        allJobTypes = true,
+        combatCapability = "shooting",
+        autoEquip = false,
+        sortOrder = 137,
+    },
+    ["Colony.Combat.Ammo"] = {
+        label = "Ammo",
+        hintText = "Any ammunition matching the worker's ranged kit",
+        reasonText = "Lets a shooting-capable worker actually use their ranged weapon in combat.",
+        searchText = "ammo ammunition bullets shells rounds magazines",
+        supportedFullTypes = {},
+        iconFullType = "Base.Bullets9mmBox",
+        requirementTags = { "Weapon.Ranged.Ammo" },
+        allJobTypes = true,
+        combatCapability = "shooting",
+        autoEquip = false,
+        sortOrder = 138,
     },
     ["Colony.Tool.Scavenge"] = {
         label = "Scavenging Tool",
@@ -340,6 +400,10 @@ local function isDefinitionRelevantToJob(definition, normalizedJobType)
         return true
     end
 
+    if type(definition) == "table" and definition.allJobTypes == true then
+        return true
+    end
+
     local jobTypes = type(definition) == "table" and definition.jobTypes or nil
     if type(jobTypes) ~= "table" or #jobTypes <= 0 then
         return false
@@ -388,6 +452,27 @@ local function collectKnownEquipmentFullTypes()
     return fullTypes
 end
 
+local function definitionSupportsFullType(definition, fullType)
+    local itemType = tostring(fullType or "")
+    if itemType == "" or type(definition) ~= "table" then
+        return false
+    end
+
+    for _, supportedFullType in ipairs(definition.supportedFullTypes or {}) do
+        if tostring(supportedFullType or "") == itemType then
+            return true
+        end
+    end
+
+    for _, requirementTag in ipairs(definition.requirementTags or {}) do
+        if Config.ItemMatchesEquipmentRequirement(itemType, requirementTag) then
+            return true
+        end
+    end
+
+    return false
+end
+
 function Config.ItemMatchesEquipmentRequirement(fullType, requirementKey)
     local itemType = tostring(fullType or "")
     local key = tostring(requirementKey or "")
@@ -433,7 +518,9 @@ function Config.GetEquipmentRequirementDefinition(requirementKey)
         supportedFullTypes = cloneStringArray(source.supportedFullTypes),
         requirementTags = cloneStringArray(source.requirementTags),
         jobTypes = cloneStringArray(source.jobTypes),
+        allJobTypes = source.allJobTypes == true,
         autoEquip = source.autoEquip == true,
+        combatCapability = source.combatCapability and tostring(source.combatCapability) or nil,
         sortOrder = tonumber(source.sortOrder) or 1000,
     }
 
@@ -444,6 +531,19 @@ function Config.GetEquipmentRequirementDefinition(requirementKey)
             appendUniqueStrings(definition.supportedFullTypes, { fullType })
             if not definition.iconFullType then
                 definition.iconFullType = fullType
+            end
+        end
+    end
+
+    local masterList = DynamicTrading and DynamicTrading.Config and DynamicTrading.Config.MasterList or nil
+    for fullType, _ in pairs(masterList or {}) do
+        for _, requirementTag in ipairs(definition.requirementTags or {}) do
+            if Config.ItemMatchesEquipmentRequirement(fullType, requirementTag) then
+                appendUniqueStrings(definition.supportedFullTypes, { fullType })
+                if not definition.iconFullType then
+                    definition.iconFullType = fullType
+                end
+                break
             end
         end
     end
@@ -519,6 +619,28 @@ function Config.GetAutoEquipRequirementDefinitions(jobType)
     return definitions
 end
 
+function Config.CanWorkerUseEquipmentRequirement(worker, requirementKey)
+    local definition = Config.GetEquipmentRequirementDefinition(requirementKey)
+    local capability = definition and definition.combatCapability or nil
+    if not capability or type(worker) ~= "table" then
+        return true
+    end
+
+    if capability == "melee" then
+        return getWorkerSkillLevel(worker, "Melee") > 0
+    end
+
+    if capability == "shooting" then
+        return getWorkerSkillLevel(worker, "Shooting") > 0
+    end
+
+    return true
+end
+
+function Config.GetWorkerEquipmentRequirementDefinitions(worker)
+    return filterDefinitionsForWorker(Config.GetEquipmentRequirementDefinitions(worker and worker.jobType or nil), worker)
+end
+
 function Config.GetMatchingEquipmentRequirementDefinitions(fullType, jobType)
     local itemType = tostring(fullType or "")
     if itemType == "" then
@@ -534,11 +656,8 @@ function Config.GetMatchingEquipmentRequirementDefinitions(fullType, jobType)
 
     local matches = {}
     for _, definition in ipairs(Config.GetEquipmentRequirementDefinitions(normalizedJobType)) do
-        for _, requirementTag in ipairs(definition.requirementTags or {}) do
-            if Config.ItemMatchesEquipmentRequirement(itemType, requirementTag) then
-                matches[#matches + 1] = definition
-                break
-            end
+        if definitionSupportsFullType(definition, itemType) then
+            matches[#matches + 1] = definition
         end
     end
 
@@ -546,8 +665,49 @@ function Config.GetMatchingEquipmentRequirementDefinitions(fullType, jobType)
     return matches
 end
 
+function Config.GetMatchingEquipmentRequirementDefinitionsForWorker(fullType, worker)
+    return filterDefinitionsForWorker(
+        Config.GetMatchingEquipmentRequirementDefinitions(fullType, worker and worker.jobType or nil),
+        worker
+    )
+end
+
+function Config.ResolveWorkerEquipmentRequirementKey(worker, fullType, preferredRequirementKey)
+    local preferredKey = tostring(preferredRequirementKey or "")
+    if preferredKey ~= "" then
+        local matches = Config.GetMatchingEquipmentRequirementDefinitionsForWorker(fullType, worker)
+        for _, definition in ipairs(matches or {}) do
+            if tostring(definition and definition.requirementKey or "") == preferredKey then
+                return preferredKey
+            end
+        end
+    end
+
+    local matches = Config.GetMatchingEquipmentRequirementDefinitionsForWorker(fullType, worker)
+    return matches[1] and tostring(matches[1].requirementKey or "") or nil
+end
+
+function Config.ItemMatchesWorkerEquipmentRequirement(fullType, requirementKey, worker)
+    local targetKey = tostring(requirementKey or "")
+    if targetKey == "" then
+        return false
+    end
+
+    for _, definition in ipairs(Config.GetMatchingEquipmentRequirementDefinitionsForWorker(fullType, worker)) do
+        if tostring(definition and definition.requirementKey or "") == targetKey then
+            return true
+        end
+    end
+
+    return false
+end
+
 function Config.IsRequiredEquipmentFullType(fullType, jobType)
     return #(Config.GetMatchingEquipmentRequirementDefinitions(fullType, jobType) or {}) > 0
+end
+
+function Config.IsRequiredEquipmentFullTypeForWorker(fullType, worker)
+    return #(Config.GetMatchingEquipmentRequirementDefinitionsForWorker(fullType, worker) or {}) > 0
 end
 
 return Config

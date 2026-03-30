@@ -59,6 +59,25 @@ local function mergeOutputLikeEntry(targetLedger, entry)
     return true
 end
 
+local function findRequirementInsertIndex(worker, requirementKey)
+    local targetKey = tostring(requirementKey or "")
+    if targetKey == "" then
+        return nil
+    end
+
+    for index, existing in ipairs(worker and worker.toolLedger or {}) do
+        if tostring(existing and existing.assignedRequirementKey or "") == targetKey then
+            return index
+        end
+        if Config.ItemMatchesWorkerEquipmentRequirement
+            and Config.ItemMatchesWorkerEquipmentRequirement(existing and existing.fullType, targetKey, worker) then
+            return index
+        end
+    end
+
+    return nil
+end
+
 function Registry.GetInventoryWeightState(worker)
     local hasNutritionLedger = worker and type(worker.nutritionLedger) == "table"
     local hasToolLedger = worker and type(worker.toolLedger) == "table"
@@ -125,6 +144,46 @@ function Registry.AddToolEntry(worker, entry)
     end
     worker.toolLedger = worker.toolLedger or {}
     worker.toolLedger[#worker.toolLedger + 1] = normalized
+    if not Internal.ApplyToolTags(worker, normalized.tags or {}) then
+        Internal.MarkToolCacheDirty(worker)
+    end
+    return true
+end
+
+function Registry.AddToolEntryForRequirement(worker, entry, requirementKey)
+    local targetKey = tostring(requirementKey or "")
+    if targetKey == "" then
+        return Registry.AddToolEntry(worker, entry)
+    end
+
+    if not worker or not entry then
+        return false
+    end
+
+    local normalized = Internal.NormalizeEquipmentEntry and Internal.NormalizeEquipmentEntry(entry) or entry
+    if not normalized or not normalized.fullType or not (Internal.IsEquipmentEntryUsable and Internal.IsEquipmentEntryUsable(normalized)) then
+        return false
+    end
+
+    if Config.ItemMatchesWorkerEquipmentRequirement
+        and not Config.ItemMatchesWorkerEquipmentRequirement(normalized.fullType, targetKey, worker) then
+        return false
+    end
+
+    local requestedQty = math.max(1, tonumber(normalized.qty) or 1)
+    if Registry.GetFittingInventoryQuantity(worker, normalized.fullType, requestedQty) < requestedQty then
+        return false
+    end
+
+    normalized.assignedRequirementKey = targetKey
+    worker.toolLedger = worker.toolLedger or {}
+    local insertIndex = findRequirementInsertIndex(worker, targetKey)
+    if insertIndex then
+        table.insert(worker.toolLedger, insertIndex, normalized)
+    else
+        worker.toolLedger[#worker.toolLedger + 1] = normalized
+    end
+
     if not Internal.ApplyToolTags(worker, normalized.tags or {}) then
         Internal.MarkToolCacheDirty(worker)
     end

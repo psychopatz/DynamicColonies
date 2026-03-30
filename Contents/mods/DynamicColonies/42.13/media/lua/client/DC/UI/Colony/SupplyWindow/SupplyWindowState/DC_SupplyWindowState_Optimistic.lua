@@ -34,7 +34,7 @@ local function applyWarehouseWeightDelta(workerData, delta)
         return
     end
 
-    warehouse.usedWeight = math.max(0, math.max(0, tonumber(warehouse.usedWeight) or 0) + math.max(0, tonumber(delta) or 0))
+    warehouse.usedWeight = math.max(0, math.max(0, tonumber(warehouse.usedWeight) or 0) + (tonumber(delta) or 0))
     warehouse.remainingWeight = math.max(0, math.max(0, tonumber(warehouse.maxWeight) or 0) - warehouse.usedWeight)
 end
 
@@ -126,7 +126,7 @@ local function addOptimisticTool(window, entry)
 
     window.workerData = type(window.workerData) == "table" and window.workerData or {}
     window.workerData.toolLedger = type(window.workerData.toolLedger) == "table" and window.workerData.toolLedger or {}
-    window.workerData.toolLedger[#window.workerData.toolLedger + 1] = {
+    local optimisticEntry = {
         fullType = entry.fullType,
         displayName = entry.displayName,
         tags = entry.tags or {},
@@ -137,7 +137,31 @@ local function addOptimisticTool(window, entry)
         usedDelta = entry.usedDelta,
         keepOnDeplete = entry.keepOnDeplete == true,
         pending = true,
+        assignedRequirementKey = entry.assignedRequirementKey,
     }
+    local dedupeSignature = Internal.getEquipmentPendingDedupeSignature(optimisticEntry)
+    local insertIndex = nil
+
+    for index, existing in ipairs(window.workerData.toolLedger) do
+        if Internal.getEquipmentPendingDedupeSignature(existing) == dedupeSignature then
+            if existing.pending == true then
+                return true
+            end
+            insertIndex = index
+            break
+        end
+        if tostring(entry.assignedRequirementKey or "") ~= ""
+            and tostring(existing and existing.assignedRequirementKey or "") == tostring(entry.assignedRequirementKey or "") then
+            insertIndex = index
+            break
+        end
+    end
+
+    if insertIndex then
+        table.insert(window.workerData.toolLedger, insertIndex, optimisticEntry)
+    else
+        window.workerData.toolLedger[#window.workerData.toolLedger + 1] = optimisticEntry
+    end
     return true
 end
 
@@ -229,4 +253,26 @@ function DC_SupplyWindow:applyOptimisticToolAssign(entries)
         self:rebuildPlayerList()
         self:refreshWorkerEntries()
     end
+end
+
+function DC_SupplyWindow:applyOptimisticWarehouseToolAssign(candidate)
+    if not candidate or not candidate.ledgerIndex then
+        return
+    end
+
+    local warehouse = ensureWarehouse(self.workerData)
+    local ledger = warehouse and warehouse.ledgers and warehouse.ledgers.equipment or nil
+    if type(ledger) ~= "table" then
+        return
+    end
+
+    local removedEntry = table.remove(ledger, math.floor(tonumber(candidate.ledgerIndex) or 0))
+    if not removedEntry then
+        return
+    end
+
+    applyWarehouseWeightDelta(self.workerData, -getEntryUnitWeight(removedEntry))
+    removedEntry.assignedRequirementKey = candidate.assignedRequirementKey
+    addOptimisticTool(self, removedEntry)
+    self:refreshWorkerEntries()
 end

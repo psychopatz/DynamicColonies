@@ -7,26 +7,6 @@ local Nutrition = DC_Colony.Nutrition
 local Registry = DC_Colony.Registry
 local Warehouse = DC_Colony.Warehouse
 
-local function workerHasToolTag(worker, requiredTag)
-    Registry.RecalculateWorker(worker)
-    local tagMap = worker and worker.assignedToolTags or {}
-    for itemTag, enabled in pairs(tagMap or {}) do
-        if enabled and Config.TagMatches and Config.TagMatches(itemTag, requiredTag) then
-            return true
-        end
-    end
-    return false
-end
-
-local function workerHasAnyRequirementTag(worker, requirementTags)
-    for _, requirementTag in ipairs(requirementTags or {}) do
-        if workerHasToolTag(worker, requirementTag) then
-            return true
-        end
-    end
-    return false
-end
-
 local function takeFirstEquipmentEntry(ownerUsername, predicate)
     local warehouse = Warehouse.GetOwnerWarehouse(ownerUsername)
     for index, entry in ipairs(warehouse.ledgers.equipment or {}) do
@@ -44,67 +24,79 @@ local function takeFirstEquipmentEntry(ownerUsername, predicate)
     return nil
 end
 
-local function getEntryTags(entry)
-    if not entry then
-        return {}
+local function getRequirementDefinitionsForRestock(worker, includeOptional)
+    local definitions = {}
+    local source = nil
+
+    if includeOptional == true and Config.GetWorkerEquipmentRequirementDefinitions then
+        source = Config.GetWorkerEquipmentRequirementDefinitions(worker)
+    elseif Config.GetAutoEquipRequirementDefinitions then
+        source = Config.GetAutoEquipRequirementDefinitions(worker and worker.jobType)
     end
 
-    if type(entry.tags) == "table" and #entry.tags > 0 then
-        return entry.tags
+    for _, definition in ipairs(source or {}) do
+        if includeOptional == true
+            or definition.autoEquip == true then
+            definitions[#definitions + 1] = definition
+        end
     end
 
-    if Config.GetItemCombinedTags and entry.fullType then
-        return Config.GetItemCombinedTags(entry.fullType) or {}
-    end
-
-    return entry.tags or {}
+    return definitions
 end
 
-local function entryHasToolTag(entry, requiredTag)
-    for _, itemTag in ipairs(getEntryTags(entry)) do
-        if Config.TagMatches and Config.TagMatches(itemTag, requiredTag) then
+local function workerHasRequirement(worker, requirementKey)
+    local targetKey = tostring(requirementKey or "")
+    if targetKey == "" then
+        return true
+    end
+
+    for _, entry in ipairs(worker and worker.toolLedger or {}) do
+        if entry and entry.fullType and Config.ItemMatchesWorkerEquipmentRequirement
+            and Config.ItemMatchesWorkerEquipmentRequirement(entry.fullType, targetKey, worker) then
             return true
         end
     end
+
     return false
 end
 
-local function takeFirstEquipmentEntryByTag(ownerUsername, requiredTag)
+local function takeFirstEquipmentEntryForRequirement(ownerUsername, worker, requirementKey)
+    local targetKey = tostring(requirementKey or "")
+    if targetKey == "" then
+        return nil
+    end
+
     return takeFirstEquipmentEntry(ownerUsername, function(candidate)
-        return entryHasToolTag(candidate, requiredTag)
+        return candidate
+            and candidate.fullType
+            and Config.ItemMatchesWorkerEquipmentRequirement
+            and Config.ItemMatchesWorkerEquipmentRequirement(candidate.fullType, targetKey, worker)
     end)
 end
 
-local function takeFirstEquipmentEntryByRequirementTags(ownerUsername, requirementTags)
-    for _, requirementTag in ipairs(requirementTags or {}) do
-        local entry = takeFirstEquipmentEntryByTag(ownerUsername, requirementTag)
-        if entry then
-            return entry
-        end
-    end
-    return nil
-end
-
-local function restockRequiredTools(worker)
+function Warehouse.RestockWorkerEquipment(worker, options)
     if not worker then
         return 0
     end
 
+    options = type(options) == "table" and options or {}
     local added = 0
-    local requirementDefinitions = Config.GetAutoEquipRequirementDefinitions
-        and Config.GetAutoEquipRequirementDefinitions(worker.jobType)
-        or {}
+    local includeOptional = options.includeOptional == true
+    local requirementDefinitions = getRequirementDefinitionsForRestock(worker, includeOptional)
+
+    Registry.RecalculateWorker(worker)
 
     for _, definition in ipairs(requirementDefinitions) do
-        local requirementTags = definition.requirementTags or { definition.requirementKey }
-        if not workerHasAnyRequirementTag(worker, requirementTags) then
+        local requirementKey = tostring(definition and definition.requirementKey or "")
+        if requirementKey ~= "" and not workerHasRequirement(worker, requirementKey) then
             if Registry.GetInventoryRemainingCapacity(worker) <= 0 then
                 break
             end
-            local entry = takeFirstEquipmentEntryByRequirementTags(worker.ownerUsername, requirementTags)
+            local entry = takeFirstEquipmentEntryForRequirement(worker.ownerUsername, worker, requirementKey)
             if entry then
-                if Registry.AddToolEntry(worker, entry) then
+                if Registry.AddToolEntryForRequirement and Registry.AddToolEntryForRequirement(worker, entry, requirementKey) then
                     added = added + 1
+                    Registry.RecalculateWorker(worker)
                 else
                     Warehouse.DepositEquipmentEntry(worker.ownerUsername, entry)
                     break
@@ -227,7 +219,9 @@ function Warehouse.RestockWorker(worker, dailyCaloriesNeed, dailyHydrationNeed)
 
     local calories, hydration, provisionCount, provisionSampleNames, provisionHiddenCount =
         restockProvisions(worker, dailyCaloriesNeed, dailyHydrationNeed)
-    local tools = restockRequiredTools(worker)
+    local tools = Warehouse.GetAutoEquipEnabled and Warehouse.GetAutoEquipEnabled(worker.ownerUsername)
+        and Warehouse.RestockWorkerEquipment(worker, { includeOptional = true })
+        or 0
     Registry.RecalculateWorker(worker)
     return {
         calories = calories,

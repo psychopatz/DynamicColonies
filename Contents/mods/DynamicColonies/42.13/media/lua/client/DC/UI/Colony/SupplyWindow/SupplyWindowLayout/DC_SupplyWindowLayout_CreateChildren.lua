@@ -101,6 +101,14 @@ function DC_SupplyWindow:createChildren()
     self.btnDropSelected:initialise()
     self:addChild(self.btnDropSelected)
 
+    self.btnAutoEquipNow = ISButton:new(layout.controlX, layout.centerButtonsY + 200, layout.controlWidth, 32, "Auto Equip", self, self.onAutoEquipNow)
+    self.btnAutoEquipNow:initialise()
+    self:addChild(self.btnAutoEquipNow)
+
+    self.btnAutoEquipToggle = ISButton:new(layout.controlX, layout.centerButtonsY + 240, layout.controlWidth, 32, "Auto Off", self, self.onToggleAutoEquip)
+    self.btnAutoEquipToggle:initialise()
+    self:addChild(self.btnAutoEquipToggle)
+
     self.playerList = Internal.ColonySupplyList:new(layout.leftX, layout.contentY, layout.leftWidth, layout.listH, "player")
     self.playerList:initialise()
     self.playerList:instantiate()

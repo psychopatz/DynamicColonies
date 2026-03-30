@@ -61,6 +61,7 @@ local function buildEmptySummary(colonyID, ownerUsername)
         buildingCapacityBonus = 0,
         capacityBonus = 0,
         upgradeLevel = 0,
+        autoEquipEnabled = false,
         medicalProvisionCarryoverHours = 0,
         maxWeight = Config.DEFAULT_WAREHOUSE_CAPACITY,
         usedWeight = 0,
@@ -199,6 +200,7 @@ local function normalizeSummary(colonyID, ownerUsername, summary)
     summary.buildingCapacityBonus = math.max(0, tonumber(summary.buildingCapacityBonus) or 0)
     summary.capacityBonus = math.max(0, tonumber(summary.capacityBonus) or 0)
     summary.upgradeLevel = math.max(0, math.floor(tonumber(summary.upgradeLevel) or 0))
+    summary.autoEquipEnabled = summary.autoEquipEnabled == true
     summary.medicalProvisionCarryoverHours = math.max(0, tonumber(summary.medicalProvisionCarryoverHours) or 0)
     summary.maxWeight = math.max(0, tonumber(summary.maxWeight) or 0)
     summary.usedWeight = math.max(0, tonumber(summary.usedWeight) or 0)
@@ -316,6 +318,7 @@ function Warehouse.Recalculate(warehouse)
     warehouse.buildingCapacityBonus = summary.buildingCapacityBonus
     warehouse.capacityBonus = summary.capacityBonus
     warehouse.upgradeLevel = summary.upgradeLevel
+    warehouse.autoEquipEnabled = summary.autoEquipEnabled == true
     warehouse.medicalProvisionCarryoverHours = summary.medicalProvisionCarryoverHours
     warehouse.maxWeight = summary.maxWeight
     warehouse.usedWeight = summary.usedWeight
@@ -410,6 +413,7 @@ function Warehouse.GetClientSummary(ownerUsername)
         usedWeight = summary.usedWeight,
         remainingWeight = summary.remainingWeight,
         upgradeLevel = summary.upgradeLevel,
+        autoEquipEnabled = summary.autoEquipEnabled == true,
         counts = Registry.Internal.CopyShallow(summary.counts or {})
     }
 end
@@ -431,6 +435,25 @@ function Warehouse.GetClientSnapshot(ownerUsername, includeLedgers)
         output = copyArray(warehouse.ledgers.output)
     }
     return snapshot
+end
+
+function Warehouse.GetAutoEquipEnabled(ownerUsername)
+    local warehouse = Warehouse.GetOwnerWarehouse(ownerUsername)
+    return warehouse and warehouse.autoEquipEnabled == true or false
+end
+
+function Warehouse.SetAutoEquipEnabled(ownerUsername, enabled)
+    local owner = Config.GetOwnerUsername(ownerUsername)
+    local summary = ensureSummary(owner)
+    local normalized = enabled == true
+    if summary.autoEquipEnabled == normalized then
+        return normalized
+    end
+
+    summary.autoEquipEnabled = normalized
+    Warehouse.TouchSummaryVersion(owner)
+    Warehouse.Recalculate(getCombinedWarehouse(owner))
+    return normalized
 end
 
 Internal.GetEntryWeight = getEntryWeight

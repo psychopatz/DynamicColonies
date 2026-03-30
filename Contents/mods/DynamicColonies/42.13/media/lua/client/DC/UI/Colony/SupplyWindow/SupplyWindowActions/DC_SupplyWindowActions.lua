@@ -10,6 +10,8 @@ require "DC/UI/Colony/SupplyWindow/SupplyWindowActions/DC_SupplyWindowActions_Mo
 require "DC/UI/Colony/SupplyWindow/SupplyWindowActions/DC_SupplyWindowActions_Deposit"
 require "DC/UI/Colony/SupplyWindow/SupplyWindowActions/DC_SupplyWindowActions_Withdraw"
 require "DC/UI/Colony/SupplyWindow/SupplyWindowActions/DC_SupplyWindowActions_Drop"
+require "DC/UI/Colony/SupplyWindow/SupplyWindowActions/DC_SupplyWindowActions_AutoEquip"
+require "DC/UI/Colony/SupplyWindow/SupplyWindowActions/DC_SupplyWindowActions_EquipmentPicker"
 require "DC/UI/Colony/SupplyWindow/SupplyWindowActions/DC_SupplyWindowActions_Selection"
 
 return DC_SupplyWindow

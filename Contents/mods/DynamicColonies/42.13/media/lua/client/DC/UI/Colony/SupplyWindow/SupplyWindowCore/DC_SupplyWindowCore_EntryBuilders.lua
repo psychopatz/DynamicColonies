@@ -127,9 +127,13 @@ function Internal.ensurePlayerEntryEquipmentData(entry)
         return entry
     end
 
+    Internal.applyDynamicTradingLockState(entry)
+
     local fullType = tostring(entry.fullType or "")
-    local matchingEquipmentRequirements = Internal.Config.GetMatchingEquipmentRequirementDefinitions
-        and Internal.Config.GetMatchingEquipmentRequirementDefinitions(fullType)
+    local matchingEquipmentRequirements = Internal.getWorkerRequirementMatches
+        and Internal.getWorkerRequirementMatches(fullType, nil)
+        or (Internal.Config.GetMatchingEquipmentRequirementDefinitions
+            and Internal.Config.GetMatchingEquipmentRequirementDefinitions(fullType))
         or {}
     local tags = Internal.Config.GetItemCombinedTags and Internal.Config.GetItemCombinedTags(fullType)
         or (Internal.Config.FindItemTags and Internal.Config.FindItemTags(fullType))
@@ -141,7 +145,9 @@ function Internal.ensurePlayerEntryEquipmentData(entry)
     end
 
     entry.hasEquipmentRequirementMatch = #matchingEquipmentRequirements > 0
-    entry.canAssignTool = entry.hasEquipmentRequirementMatch and entry.isUsableEquipment == true
+    entry.canAssignTool = entry.hasEquipmentRequirementMatch
+        and entry.isUsableEquipment == true
+        and entry.isDynamicTradingLocked ~= true
     entry.equipmentRequirementKeys = matchingEquipmentRequirements
     entry.tags = tags
     entry.searchText = table.concat(searchTerms, " ")
@@ -160,14 +166,26 @@ function Internal.getPlayerEntryEquipmentMatches(entry, worker)
     local normalizeJobType = config.NormalizeJobType
     local normalizedJob = normalizeJobType and normalizeJobType(worker and worker.jobType) or tostring(worker and worker.jobType or "")
     local cacheKey = normalizedJob ~= "" and normalizedJob or "__all"
+    if config.GetWorkerEquipmentRequirementDefinitions and worker then
+        local requirementKeys = {}
+        for _, definition in ipairs(config.GetWorkerEquipmentRequirementDefinitions(worker) or {}) do
+            requirementKeys[#requirementKeys + 1] = tostring(definition and definition.requirementKey or "")
+        end
+        table.sort(requirementKeys)
+        cacheKey = cacheKey .. "|" .. table.concat(requirementKeys, ",")
+    elseif worker and worker.workerID then
+        cacheKey = cacheKey .. "|" .. tostring(worker.workerID)
+    end
 
     entry.jobEquipmentMatches = entry.jobEquipmentMatches or {}
     if entry.jobEquipmentMatches[cacheKey] ~= nil then
         return entry.jobEquipmentMatches[cacheKey]
     end
 
-    local matches = config.GetMatchingEquipmentRequirementDefinitions
-        and config.GetMatchingEquipmentRequirementDefinitions(entry.fullType, normalizedJob ~= "__all" and normalizedJob or nil)
+    local matches = config.GetMatchingEquipmentRequirementDefinitionsForWorker
+        and config.GetMatchingEquipmentRequirementDefinitionsForWorker(entry.fullType, worker)
+        or (config.GetMatchingEquipmentRequirementDefinitions
+            and config.GetMatchingEquipmentRequirementDefinitions(entry.fullType, normalizedJob ~= "__all" and normalizedJob or nil))
         or {}
     entry.jobEquipmentMatches[cacheKey] = matches
     return matches
@@ -329,6 +347,7 @@ function Internal.buildWorkerToolEntry(entry, index)
         texture = entry.texture or normalizedEntry.texture or Internal.getTextureForFullType(normalizedEntry.fullType),
         pending = entry.pending == true,
         isUsableEquipment = isUsableEquipmentEntry(normalizedEntry),
+        assignedRequirementKey = normalizedEntry.assignedRequirementKey,
     }
     return copyEquipmentState(toolEntry, normalizedEntry)
 end
@@ -410,6 +429,7 @@ function Internal.buildWorkerToolEntryFromPlayerEntry(entry)
         texture = entry.texture,
         pending = true,
         isUsableEquipment = entry.isUsableEquipment == true,
+        assignedRequirementKey = entry.assignedRequirementKey,
     }
     return copyEquipmentState(workerEntry, entry)
 end

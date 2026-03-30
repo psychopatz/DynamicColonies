@@ -55,22 +55,18 @@ function Internal.getWorkerHeaderTitle(window)
     local worker = window and window.workerData or nil
     local config = Internal.Config or {}
     local inventoryState = Internal.getWorkerInventoryWeightState and Internal.getWorkerInventoryWeightState(worker) or nil
-    local inventoryWeight = Internal.formatWeightValue(inventoryState and inventoryState.usedWeight)
-    local inventoryCapacity = Internal.formatWeightValue(inventoryState and inventoryState.maxWeight)
+    local carryWeight = Internal.formatWeightValue(inventoryState and inventoryState.usedWeight)
+    local carryCapacity = Internal.formatWeightValue(inventoryState and inventoryState.maxWeight)
 
     if activeTab == Internal.Tabs.Output then
         local normalizedJob = config.NormalizeJobType and config.NormalizeJobType(worker and worker.jobType) or tostring(worker and worker.jobType or "")
-        local carryWeight = Internal.formatWeightValue(worker and worker.haulRawWeight)
-        local carryCapacity = Internal.formatWeightValue(worker and worker.maxCarryWeight)
+        local haulWeight = Internal.formatWeightValue(worker and worker.haulRawWeight)
+        local haulCapacity = Internal.formatWeightValue(worker and worker.maxCarryWeight)
 
         if normalizedJob ~= ((config.JobTypes or {}).Scavenge) then
             local storedWeight = Internal.formatWeightValue(worker and worker.outputWeight)
             return workerName
-                .. " (Inv "
-                .. inventoryWeight
-                .. " / "
-                .. inventoryCapacity
-                .. " | Stored "
+                .. " (Stored "
                 .. storedWeight
                 .. " | Carry "
                 .. carryWeight
@@ -80,18 +76,18 @@ function Internal.getWorkerHeaderTitle(window)
         end
 
         return workerName
-            .. " (Inv "
-            .. inventoryWeight
-            .. " / "
-            .. inventoryCapacity
-            .. " | Carry "
+            .. " (Carry "
             .. carryWeight
             .. " / "
             .. carryCapacity
+            .. " | Haul "
+            .. haulWeight
+            .. " / "
+            .. haulCapacity
             .. ") Inventory"
     end
 
-    return workerName .. " Inventory (" .. inventoryWeight .. " / " .. inventoryCapacity .. ")"
+    return workerName .. " Inventory (Carry " .. carryWeight .. " / " .. carryCapacity .. ")"
 end
 
 function Internal.getTabButtonTitle(window, tabID)

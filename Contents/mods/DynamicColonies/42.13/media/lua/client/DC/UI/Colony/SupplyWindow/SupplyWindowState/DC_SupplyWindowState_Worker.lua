@@ -16,8 +16,20 @@ function DC_SupplyWindow:refreshWorkerEntries()
 
     if activeTab == Internal.Tabs.Equipment then
         local ledger = isWarehouseView and (warehouseLedgers.equipment or {}) or (worker and worker.toolLedger or {})
+        local realEquipmentSignatures = {}
+        if not isWarehouseView then
+            for _, ledgerEntry in ipairs(ledger) do
+                if ledgerEntry and ledgerEntry.pending ~= true then
+                    realEquipmentSignatures[Internal.getEquipmentPendingDedupeSignature(ledgerEntry)] = true
+                end
+            end
+        end
         for index, ledgerEntry in ipairs(ledger) do
-            local entry = Internal.buildWorkerToolEntry(ledgerEntry, index)
+            local skipPendingDuplicate = not isWarehouseView
+                and ledgerEntry
+                and ledgerEntry.pending == true
+                and realEquipmentSignatures[Internal.getEquipmentPendingDedupeSignature(ledgerEntry)] == true
+            local entry = not skipPendingDuplicate and Internal.buildWorkerToolEntry(ledgerEntry, index) or nil
             if entry then
                 self.workerEntries[#self.workerEntries + 1] = entry
             end

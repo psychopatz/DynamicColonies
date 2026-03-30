@@ -38,9 +38,25 @@ function DC_SupplyWindow.Open(worker, viewMode)
     window:setVisible(true)
     window:addToUIManager()
     window:bringToTop()
-    window:setWorkerData(DC_SupplyWindow.Internal.resolveWorkerDetail(worker.workerID) or worker)
+    local resolvedWorker = DC_SupplyWindow.Internal.resolveWorkerDetail(worker.workerID) or nil
+    local workerDetail = resolvedWorker
+    if type(worker) == "table" then
+        if not workerDetail then
+            workerDetail = worker
+        else
+            for key, value in pairs(worker) do
+                if workerDetail[key] == nil then
+                    workerDetail[key] = value
+                end
+            end
+        end
+    end
+    window:setWorkerData(workerDetail or worker)
     window:startInventoryScan()
     window:requestWorkerDetails()
+    if DC_EquipmentPickerModal and DC_EquipmentPickerModal.Preload then
+        DC_EquipmentPickerModal.Preload()
+    end
     window:updateStatus(
         (window.viewMode == ((DC_SupplyWindow.Internal.ViewModes or {}).Warehouse) and "Opening warehouse for " or "Opening inventory for ")
             .. subjectName .. "."

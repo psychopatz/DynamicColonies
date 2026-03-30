@@ -21,4 +21,12 @@ function DC_SupplyWindow.onWorkerListMouseDown(target, item)
     target.selectedWorkerEntry = entry
     target.activeSelectionSide = "worker"
     target:updateItemDetail(entry, "worker")
+
+    local activeTab = target.activeTab or (DC_SupplyWindow.Internal and DC_SupplyWindow.Internal.Tabs and DC_SupplyWindow.Internal.Tabs.Provisions) or "provisions"
+    if activeTab == ((DC_SupplyWindow.Internal and DC_SupplyWindow.Internal.Tabs or {}).Equipment)
+        and entry
+        and entry.kind ~= "money"
+        and target.openEquipmentPickerForWorkerEntry then
+        target:openEquipmentPickerForWorkerEntry(entry)
+    end
 end

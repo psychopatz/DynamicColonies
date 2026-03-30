@@ -93,6 +93,11 @@ function Config.IsColonyToolFullType(fullType)
         return true
     end
 
+    if Config.GetMatchingEquipmentRequirementDefinitions
+        and #(Config.GetMatchingEquipmentRequirementDefinitions(fullType) or {}) > 0 then
+        return true
+    end
+
     return Config.GetBackpackItemProfile and Config.GetBackpackItemProfile(fullType) ~= nil
 end
 

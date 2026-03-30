@@ -31,6 +31,20 @@ local function getDepositTargetLabel(window)
     return "NPC inventory"
 end
 
+local function getSelectedEquipmentRequirementKey(window)
+    local workerEntry = window and window.selectedWorkerEntry or nil
+    if Internal.isGroupEntry and Internal.isGroupEntry(workerEntry) then
+        workerEntry = workerEntry.childEntries and workerEntry.childEntries[1] or nil
+    end
+    if not workerEntry then
+        return nil
+    end
+    if workerEntry.kind == "placeholder" then
+        return workerEntry.requirementKey
+    end
+    return Internal.resolveWorkerEquipmentRequirementKey and Internal.resolveWorkerEquipmentRequirementKey(workerEntry, window and window.workerData or nil) or nil
+end
+
 local function takeEntrySubset(entries, quantity)
     local result = {}
     local limit = math.max(1, math.floor(tonumber(quantity) or 1))
@@ -238,22 +252,25 @@ function DC_SupplyWindow:assignToolEntries(entries)
     end
 
     if #selectedEntries <= 0 then
-        self:updateStatus("No valid labour tools selected.")
+        self:updateStatus("No valid equipment selected.")
         return
     end
 
     local fittingEntries, blockedCount = selectEntriesThatFit(self, selectedEntries)
     if #fittingEntries <= 0 then
-        self:updateStatus("No selected labour tools fit in the remaining capacity.")
+        self:updateStatus("No selected equipment fits in the remaining capacity.")
         return
     end
 
+    local requirementKey = getSelectedEquipmentRequirementKey(self)
     local sentEntries = {}
     for _, entry in ipairs(fittingEntries) do
         if self:sendColonyCommand(getEquipmentDepositCommand(self), {
                 workerID = self.workerID,
-                itemID = entry.itemID
+                itemID = entry.itemID,
+                requirementKey = requirementKey,
             }) then
+            entry.assignedRequirementKey = requirementKey
             sentEntries[#sentEntries + 1] = entry
         end
     end
@@ -312,7 +329,7 @@ function DC_SupplyWindow:onDepositSelected()
 
     if activeTab == Internal.Tabs.Equipment then
         if not selectedEntry.canAssignTool then
-            self:updateStatus("Select a valid labour tool first.")
+            self:updateStatus("Select valid equipment first.")
             return
         end
         self:assignToolEntries(concreteEntries)
@@ -364,7 +381,7 @@ function DC_SupplyWindow:onDepositVisible()
 
     if #visibleEntries <= 0 then
         if activeTab == Internal.Tabs.Equipment then
-            self:updateStatus("No visible labour tools matched the current filter.")
+            self:updateStatus("No visible equipment matched the current filter.")
         elseif activeTab == Internal.Tabs.Output then
             self:updateStatus("No visible warehouse storage items matched the current filter.")
         elseif activeTab == Internal.Tabs.Provisions then

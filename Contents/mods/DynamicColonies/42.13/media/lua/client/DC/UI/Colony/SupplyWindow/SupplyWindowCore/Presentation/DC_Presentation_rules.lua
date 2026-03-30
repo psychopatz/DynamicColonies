@@ -8,7 +8,7 @@ local function isRelevantEquipmentEntry(entry, window)
         Internal.ensurePlayerEntryEquipmentData(entry)
     end
 
-    if not entry or entry.kind == "money" or entry.canAssignTool ~= true then
+    if not entry or entry.kind == "money" or entry.canAssignTool ~= true or entry.isDynamicTradingLocked == true then
         return false
     end
 
@@ -16,6 +16,10 @@ local function isRelevantEquipmentEntry(entry, window)
     local worker = window and window.workerData or nil
     if worker and worker.jobType and Internal.getPlayerEntryEquipmentMatches then
         return #(Internal.getPlayerEntryEquipmentMatches(entry, worker) or {}) > 0
+    end
+
+    if config.GetMatchingEquipmentRequirementDefinitionsForWorker and worker and worker.jobType then
+        return #(config.GetMatchingEquipmentRequirementDefinitionsForWorker(entry.fullType, worker) or {}) > 0
     end
 
     if config.GetMatchingEquipmentRequirementDefinitions and worker and worker.jobType then

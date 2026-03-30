@@ -64,6 +64,7 @@ local function buildGroupKey(entry, activeTab, side)
         boolKey(entry.canDeposit),
         boolKey(entry.canAssignTool),
         normalizeTagKey(entry.tags),
+        tostring(entry.assignedRequirementKey or ""),
         getDurabilityGroupKey(entry, activeTab),
     }
     return table.concat(parts, "|")
@@ -206,6 +207,7 @@ function Internal.buildGroupedRows(entries, activeTab, side, window)
                     useDelta = first.useDelta,
                     usedDelta = first.usedDelta,
                     keepOnDeplete = first.keepOnDeplete == true,
+                    assignedRequirementKey = first.assignedRequirementKey,
                 }
 
                 for _, child in ipairs(entriesForGroup) do

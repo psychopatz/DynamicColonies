@@ -94,6 +94,9 @@ function DC_SupplyWindow:updateItemDetail(entry, side)
                 .. ((Internal.isWarehouseView and Internal.isWarehouseView(self) and self.activeTab == Internal.Tabs.Output)
                         and "<LINE> <RGB:0.62,0.62,0.62> Warehouse weight shows total used capacity across Provisions, Storage, and Equipment, not just the currently visible storage rows. "
                     or "")
+                .. (((self.activeTab == Internal.Tabs.Equipment) and Internal.isInventoryView and Internal.isInventoryView(self))
+                        and "<LINE> <RGB:0.62,0.62,0.62> Use <RGB:1,1,1> Auto Equip <RGB:0.62,0.62,0.62> to fill missing gear from warehouse storage, and <RGB:1,1,1> Auto On/Off <RGB:0.62,0.62,0.62> to control automatic warehouse equipping while the worker is home. "
+                    or "")
                 .. "<LINE> <RGB:0.62,0.62,0.62> Active worker tab: <RGB:1,1,1> "
                 .. workerTabLabel
                 .. " <RGB:0.62,0.62,0.62> | "
@@ -128,6 +131,7 @@ function DC_SupplyWindow:updateItemDetail(entry, side)
         elseif entry.kind == "placeholder" then
             local supportDisplay = Internal.getPlaceholderSupportDisplay(self, entry)
             text = text .. " <RGB:0.82,0.82,0.82> Needed For: <RGB:1,1,1> " .. tostring(entry.reasonText or "This tool unlocks additional work options for the worker.") .. " <LINE> "
+            text = text .. " <RGB:0.82,0.82,0.82> Action: <RGB:1,1,1> Click this row to open the equipment picker. <LINE> "
             setDetailSupportPanel(self, supportDisplay.title, supportDisplay.entries)
         else
             setDetailSupportPanel(self, "", {})
@@ -141,6 +145,9 @@ function DC_SupplyWindow:updateItemDetail(entry, side)
         elseif self.activeTab == Internal.Tabs.Equipment then
             text = appendWeightLine(text, entry)
             text = appendConditionLine(text, entry)
+            if Internal.isInventoryView and Internal.isInventoryView(self) then
+                text = text .. " <RGB:0.82,0.82,0.82> Action: <RGB:1,1,1> Click this row to replace the active matching equipment. <LINE> "
+            end
         elseif self.activeTab == Internal.Tabs.Output then
             text = text .. " <RGB:0.82,0.82,0.82> Quantity: <RGB:1,1,1> " .. tostring(entry.qty or 1) .. " <LINE> "
             text = appendWeightLine(text, entry)

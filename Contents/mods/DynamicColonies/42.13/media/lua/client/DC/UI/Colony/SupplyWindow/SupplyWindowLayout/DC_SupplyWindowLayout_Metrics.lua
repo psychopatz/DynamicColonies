@@ -13,6 +13,7 @@ function Internal.getSupplyWindowLayoutMetrics(window)
     local tabGap = 6
     local searchH = 24
     local detailH = math.max(120, math.min(184, math.floor(window.height * 0.24)))
+    local centerButtonStackHeight = 272
 
     local headerY = th + pad
     local tabsY = headerY + headerTextH
@@ -26,7 +27,7 @@ function Internal.getSupplyWindowLayoutMetrics(window)
     local leftX = pad
     local controlX = leftX + leftWidth + gap
     local rightX = controlX + controlWidth + gap
-    local centerButtonsY = contentY + math.floor(math.max(0, listH - 192) / 2)
+    local centerButtonsY = contentY + math.floor(math.max(0, listH - centerButtonStackHeight) / 2)
     local detailY = contentY + listH + 10
 
     return {
@@ -49,5 +50,6 @@ function Internal.getSupplyWindowLayoutMetrics(window)
         detailH = detailH,
         listH = listH,
         centerButtonsY = centerButtonsY,
+        centerButtonStackHeight = centerButtonStackHeight,
     }
 end
