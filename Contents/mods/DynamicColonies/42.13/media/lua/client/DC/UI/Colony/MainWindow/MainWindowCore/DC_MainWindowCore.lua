@@ -9,5 +9,5 @@ require "DC/UI/Colony/MainWindow/MainWindowCore/DC_MainWindowCore_WorkerPresenta
 require "DC/UI/Colony/MainWindow/MainWindowCore/DC_MainWindowCore_PlayerAccess"
 require "DC/UI/Colony/MainWindow/MainWindowCore/DC_MainWindowCore_WorkerResolvers"
 require "DC/UI/Colony/MainWindow/MainWindowCore/DC_MainWindowCore_ColonyCommands"
-require "DC/UI/Colony/MainWindow/MainWindowCore/DC_MainWindowCore_ReservePanel"
+require "DC/UI/Colony/MainWindow/MainWindowCore/MainWindowCoreReservePanel/MainWindowCoreReservePanel"
 
