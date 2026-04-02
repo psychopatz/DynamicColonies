@@ -3,6 +3,8 @@ require "ISUI/ISButton"
 require "ISUI/ISRichTextPanel"
 require "ISUI/ISScrollingListBox"
 require "DC/UI/Colony/Resources/DC_ResourcesClientBridge"
+require "DC/UI/Colony/Resources/DC_ResourcesWindow_CategoryBarData"
+require "DC/UI/Colony/Resources/DC_ResourcesWindow_CategoryList"
 
 DC_ResourcesWindow = ISCollapsableWindow:derive("DC_ResourcesWindow")
 DC_ResourcesWindow.instance = nil
@@ -27,10 +29,9 @@ function DC_ResourcesWindow:createChildren()
     self.btnRefresh:initialise()
     self:addChild(self.btnRefresh)
 
-    self.categoryList = ISScrollingListBox:new(10, th + 40, 180, self.height - th - 52)
+    self.categoryList = DC_ResourceCategoryList:new(10, th + 40, 180, self.height - th - 52)
     self.categoryList:initialise()
     self.categoryList:instantiate()
-    self.categoryList.itemheight = 32
     self.categoryList.target = self
     self.categoryList.onMouseDown = function(list, x, y)
         local result = ISScrollingListBox.onMouseDown(list, x, y)
@@ -62,6 +63,10 @@ function DC_ResourcesWindow:createChildren()
     self.selectedCategoryID = self.selectedCategoryID or "Water"
     self:updateStatus("Resources ready.")
     self:requestSnapshot()
+end
+
+function DC_ResourcesWindow:getCategoryBarData(category)
+    return DC_ResourcesWindow_CategoryBarData.GetCategoryBarData(category)
 end
 
 function DC_ResourcesWindow:updateStatus(message)
@@ -184,10 +189,6 @@ function DC_ResourcesWindow:populateCategoryList()
     local selectedIndex = -1
     for index, category in ipairs(self.snapshot and self.snapshot.categories or {}) do
         local label = tostring(category.displayName or category.id or "Resource")
-            .. "  |  "
-            .. tostring(category.metric or "-")
-            .. "  |  "
-            .. tostring(category.status or "")
         self.categoryList:addItem(label, category)
         if tostring(category.id or "") == tostring(self.selectedCategoryID or "Water") then
             selectedIndex = index
