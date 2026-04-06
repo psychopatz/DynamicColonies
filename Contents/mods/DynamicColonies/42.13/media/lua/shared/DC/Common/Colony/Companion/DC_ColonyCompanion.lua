@@ -9,6 +9,14 @@ local TRAVEL_STAGE_ACTIVE = "Active"
 local TRAVEL_STAGE_DEPARTING = "Departing"
 local TRAVEL_STAGE_RETURNING = "Returning"
 
+local function debugCompanion(message)
+    local text = "[DC Companion Debug] " .. tostring(message)
+    print(text)
+    if DynamicTrading and DynamicTrading.Log then
+        DynamicTrading.Log("DTCommons", "Colony", "Companion", tostring(message))
+    end
+end
+
 local function getRegistry()
     return DC_Colony and DC_Colony.Registry or nil
 end
@@ -64,12 +72,14 @@ local function appendLog(worker, text, currentHour, category)
     end
 end
 
-local function getPlayerFaction(ownerUsername)
-    if not DynamicTrading_Factions or not DynamicTrading_Factions.GetPlayerFaction then
+local function getRosterRegistry()
+    if not DynamicTrading_Roster or not DynamicTrading_Roster.MOD_DATA_KEY then
         return nil
     end
-
-    return DynamicTrading_Factions.GetPlayerFaction(ownerUsername)
+    if not ModData or not ModData.get then
+        return nil
+    end
+    return ModData.get(DynamicTrading_Roster.MOD_DATA_KEY)
 end
 
 local function getCompanionData(worker)
@@ -87,6 +97,41 @@ local function getCompanionUUID(worker)
     return uuid ~= "" and uuid or nil
 end
 
+local function findExistingCompanionSoul(worker)
+    if not worker or not DynamicTrading_Roster or not DynamicTrading_Roster.GetSoul then
+        return nil
+    end
+
+    local companionData = getCompanionData(worker)
+    local existingUUID = companionData and companionData.uuid or nil
+    if existingUUID and DynamicTrading_Roster.GetSoul(existingUUID) then
+        return existingUUID, false
+    end
+
+    local rosterData = getRosterRegistry()
+    local souls = rosterData and rosterData.Souls or nil
+    if type(souls) ~= "table" then
+        return nil
+    end
+
+    local ownerUsername = tostring(worker.ownerUsername or "")
+    for uuid, soul in pairs(souls) do
+        if soul
+            and soul.linkedWorkerID == worker.workerID
+            and tostring(soul.ownerUsername or "") == ownerUsername then
+            local liveSoul = DynamicTrading_Roster.GetSoul(uuid)
+            if liveSoul and tostring(liveSoul.dcCompanionJob or "") == tostring((Config.JobTypes and Config.JobTypes.TravelCompanion) or "TravelCompanion") then
+                if companionData then
+                    companionData.uuid = uuid
+                end
+                return uuid, false
+            end
+        end
+    end
+
+    return nil
+end
+
 local function saveSoul(uuid, npcData)
     if uuid and npcData and DynamicTrading_Roster and DynamicTrading_Roster.SaveSoul then
         DynamicTrading_Roster.SaveSoul(uuid, npcData)
@@ -99,6 +144,56 @@ local function getSoul(uuid)
     end
 
     return DynamicTrading_Roster.GetSoul(uuid)
+end
+
+local function createCompanionSoul(worker)
+    if not worker or not DynamicTrading_Roster or not DynamicTrading_Roster.AddSoul then
+        return nil, "Dynamic Trading roster is unavailable.", false
+    end
+
+    local uuid, existing = findExistingCompanionSoul(worker)
+    if uuid then
+        return uuid, nil, existing == true
+    end
+
+    local homeCoords = {
+        x = worker.homeX or 0,
+        y = worker.homeY or 0,
+        z = worker.homeZ or 0,
+    }
+    local archetypeID = worker.archetypeID or worker.profession or "General"
+
+    uuid = DynamicTrading_Roster.AddSoul("Independent", archetypeID, homeCoords, {
+        forceFaction = true
+    })
+    if not uuid then
+        return nil, "Unable to create companion soul.", false
+    end
+
+    local companionData = getCompanionData(worker)
+    if companionData then
+        companionData.uuid = uuid
+    end
+
+    debugCompanion(
+        "Created independent companion soul workerID=" .. tostring(worker.workerID)
+            .. " uuid=" .. tostring(uuid)
+            .. " owner=" .. tostring(worker.ownerUsername)
+    )
+
+    return uuid, nil, true
+end
+
+local function restoreWorkerAfterFailedStart(worker)
+    if not worker then
+        return
+    end
+
+    worker.jobEnabled = false
+    worker.presenceState = Config.PresenceStates.Home
+    worker.travelHoursRemaining = 0
+    worker.returnReason = nil
+    worker.state = Config.States.Idle
 end
 
 local function getAmmoTypeForWeapon(fullType)
@@ -117,6 +212,105 @@ local function getFallbackAmmoCount(weaponType)
     local clipSize = scriptItem and scriptItem.getClipSize and tonumber(scriptItem:getClipSize()) or 0
     clipSize = math.max(1, math.floor(clipSize or 0))
     return clipSize * 3
+end
+
+local DEFAULT_COMPANION_LOADOUTS = {
+    melee = {
+        rangedWeapon = nil,
+        rangedAmmoType = nil,
+        ammoCount = 0,
+        meleeWeapon = "Base.BaseballBat",
+        bag = nil,
+    },
+    ranged = {
+        rangedWeapon = "Base.Pistol",
+        rangedAmmoType = "Base.Bullets9mm",
+        ammoCount = 24,
+        meleeWeapon = nil,
+        bag = nil,
+    },
+    hybrid = {
+        rangedWeapon = "Base.Pistol",
+        rangedAmmoType = "Base.Bullets9mm",
+        ammoCount = 24,
+        meleeWeapon = "Base.BaseballBat",
+        bag = nil,
+    },
+}
+
+local function copyLoadout(loadout)
+    local source = type(loadout) == "table" and loadout or {}
+    return {
+        rangedWeapon = source.rangedWeapon or nil,
+        rangedAmmoType = source.rangedAmmoType or nil,
+        ammoCount = math.max(0, tonumber(source.ammoCount) or 0),
+        meleeWeapon = source.meleeWeapon or nil,
+        bag = source.bag or nil,
+        rangedCondition = source.rangedCondition ~= nil and tonumber(source.rangedCondition) or nil,
+        meleeCondition = source.meleeCondition ~= nil and tonumber(source.meleeCondition) or nil,
+    }
+end
+
+local function getFallbackLoadoutPreset(loadoutType)
+    if DTNPCProtect and DTNPCProtect.GetWorldLoadoutPreset then
+        local ok, preset = pcall(DTNPCProtect.GetWorldLoadoutPreset, loadoutType)
+        if ok and type(preset) == "table" then
+            return copyLoadout(preset)
+        end
+    end
+
+    local preset = DEFAULT_COMPANION_LOADOUTS[loadoutType] or DEFAULT_COMPANION_LOADOUTS.melee
+    return copyLoadout(preset)
+end
+
+local function getPreferredFallbackLoadoutType(worker)
+    local melee = getWorkerSkillLevel(worker, "Melee")
+    local shooting = getWorkerSkillLevel(worker, "Shooting")
+
+    if shooting > 0 and melee > 0 then
+        return "hybrid"
+    end
+    if shooting > 0 then
+        return "ranged"
+    end
+    return "melee"
+end
+
+local function mergeFallbackCombatLoadout(worker, loadout)
+    loadout = copyLoadout(loadout)
+
+    local preferredType = getPreferredFallbackLoadoutType(worker)
+    local fallback = getFallbackLoadoutPreset(preferredType)
+    local appliedFallback = false
+
+    if (not loadout.meleeWeapon or loadout.meleeWeapon == "")
+        and (preferredType == "melee" or preferredType == "hybrid")
+        and fallback.meleeWeapon and fallback.meleeWeapon ~= "" then
+        loadout.meleeWeapon = fallback.meleeWeapon
+        loadout.meleeCondition = fallback.meleeCondition
+        appliedFallback = true
+    end
+
+    if (not loadout.rangedWeapon or loadout.rangedWeapon == "")
+        and (preferredType == "ranged" or preferredType == "hybrid")
+        and fallback.rangedWeapon and fallback.rangedWeapon ~= "" then
+        loadout.rangedWeapon = fallback.rangedWeapon
+        loadout.rangedCondition = fallback.rangedCondition
+        appliedFallback = true
+    end
+
+    if loadout.rangedWeapon and (not loadout.rangedAmmoType or loadout.rangedAmmoType == "") then
+        loadout.rangedAmmoType = fallback.rangedAmmoType or getAmmoTypeForWeapon(loadout.rangedWeapon)
+        appliedFallback = true
+    end
+
+    if loadout.rangedWeapon and (tonumber(loadout.ammoCount) or 0) <= 0 then
+        local fallbackAmmo = math.max(0, tonumber(fallback.ammoCount) or 0)
+        loadout.ammoCount = fallbackAmmo > 0 and fallbackAmmo or getFallbackAmmoCount(loadout.rangedWeapon)
+        appliedFallback = true
+    end
+
+    return loadout, appliedFallback, preferredType
 end
 
 local function hasTag(entry, targetTag)
@@ -183,7 +377,7 @@ local function buildLoadoutFromWorker(worker)
         ammoCount = getFallbackAmmoCount(rangedWeapon)
     end
 
-    return {
+    local loadout = {
         rangedWeapon = rangedWeapon,
         rangedAmmoType = ammoType,
         ammoCount = math.max(0, tonumber(ammoCount) or 0),
@@ -192,6 +386,19 @@ local function buildLoadoutFromWorker(worker)
         rangedCondition = chosen.ranged and chosen.ranged.condition or nil,
         meleeCondition = chosen.melee and chosen.melee.condition or nil,
     }
+
+    local resolvedLoadout, appliedFallback, fallbackType = mergeFallbackCombatLoadout(worker, loadout)
+    if appliedFallback then
+        debugCompanion(
+            "Applied fallback combat loadout workerID=" .. tostring(worker and worker.workerID)
+                .. " type=" .. tostring(fallbackType)
+                .. " melee=" .. tostring(resolvedLoadout.meleeWeapon or "nil")
+                .. " ranged=" .. tostring(resolvedLoadout.rangedWeapon or "nil")
+                .. " ammo=" .. tostring(resolvedLoadout.ammoCount or 0)
+        )
+    end
+
+    return resolvedLoadout
 end
 
 local function buildHealthSeed(worker, npcData)
@@ -290,7 +497,7 @@ local function finalizeReturnTravel(worker, currentHour)
     companionData.currentOrder = nil
     companionData.returnReason = nil
     companionData.returnTravelHours = nil
-    appendLog(worker, "Returned home from companion duty.", currentHour, "travel")
+    appendLog(worker, "Returned home after companion duty.", currentHour, "travel")
 end
 
 function Companion.IsV2Active()
@@ -347,7 +554,8 @@ function Companion.SyncNPCFromWorker(worker, uuid)
     npcData.archetypeID = worker.archetypeID or npcData.archetypeID or worker.profession or "General"
     npcData.ownerUsername = worker.ownerUsername
     npcData.linkedWorkerID = worker.workerID
-    npcData.isPlayerFactionTrader = true
+    npcData.isPlayerFactionTrader = false
+    npcData.factionID = npcData.factionID or "Independent"
     npcData.homeCoords = {
         x = worker.homeX or 0,
         y = worker.homeY or 0,
@@ -360,29 +568,68 @@ function Companion.SyncNPCFromWorker(worker, uuid)
     return true
 end
 
+function Companion.SyncActiveNPCFromWorker(worker, shouldBroadcast)
+    if not worker or not Companion.IsTravelCompanionWorker(worker) then
+        return false
+    end
+
+    local uuid = getCompanionUUID(worker)
+    if not uuid then
+        return false
+    end
+
+    local syncedSoul = Companion.SyncNPCFromWorker(worker, uuid) == true
+    local npcData = getSoul(uuid)
+    if not npcData then
+        return syncedSoul
+    end
+
+    if isClient() and not isServer() then
+        return syncedSoul
+    end
+
+    local liveSynced = false
+    if DTNPCServerCore and DTNPCServerCore.UpdateNPCByUUID then
+        local changed = DTNPCServerCore.UpdateNPCByUUID(uuid, {
+            loadout = npcData.loadout,
+        }, shouldBroadcast ~= false)
+        liveSynced = changed == true
+        debugCompanion(
+            "SyncActiveNPCFromWorker workerID=" .. tostring(worker.workerID)
+                .. " uuid=" .. tostring(uuid)
+                .. " liveSynced=" .. tostring(liveSynced)
+                .. " melee=" .. tostring(npcData.loadout and npcData.loadout.meleeWeapon or "nil")
+                .. " ranged=" .. tostring(npcData.loadout and npcData.loadout.rangedWeapon or "nil")
+                .. " bag=" .. tostring(npcData.loadout and npcData.loadout.bag or "nil")
+        )
+    end
+
+    return syncedSoul or liveSynced
+end
+
 function Companion.StartWorkerCompanion(player, worker)
     if not player or not worker or not Companion.IsTravelCompanionWorker(worker) then
+        debugCompanion("StartWorkerCompanion rejected: invalid player/worker context")
         return false, "Companion start is unavailable."
     end
 
     local okay, reason = Companion.CanWorkerBeCompanion(worker)
     if not okay then
+        debugCompanion("StartWorkerCompanion capability check failed workerID=" .. tostring(worker.workerID) .. " reason=" .. tostring(reason))
         return false, reason
     end
 
-    if not DynamicTrading_Factions or not DynamicTrading_Factions.EnsureTradeSoul then
-        return false, "Dynamic Trading V2 is not ready."
-    end
-
-    local faction = getPlayerFaction(worker.ownerUsername)
-    if not faction or not faction.id then
-        return false, "Create a player faction first."
-    end
-
-    local uuid, err = DynamicTrading_Factions.EnsureTradeSoul(faction.id, worker.workerID)
+    local uuid, err, createdFresh = createCompanionSoul(worker)
     if not uuid then
+        debugCompanion("StartWorkerCompanion failed to prepare companion soul workerID=" .. tostring(worker.workerID) .. " reason=" .. tostring(err))
         return false, err or "Unable to prepare companion soul."
     end
+
+    debugCompanion(
+        "StartWorkerCompanion prepared companion soul workerID=" .. tostring(worker.workerID)
+            .. " uuid=" .. tostring(uuid)
+            .. " owner=" .. tostring(worker.ownerUsername)
+    )
 
     local companionData = getCompanionData(worker)
     companionData.uuid = uuid
@@ -400,21 +647,50 @@ function Companion.StartWorkerCompanion(player, worker)
     Companion.SyncNPCFromWorker(worker, uuid)
 
     if isClient() and not isServer() then
+        debugCompanion("StartWorkerCompanion client optimistic success workerID=" .. tostring(worker.workerID) .. " uuid=" .. tostring(uuid))
         return true, uuid
     end
 
-    if not DTNPCServerCore or not DTNPCServerCore.SpawnOffscreenCompanionByUUID then
+    if not DTNPCServerCore then
+        debugCompanion("StartWorkerCompanion missing DTNPCServerCore workerID=" .. tostring(worker.workerID))
+        restoreWorkerAfterFailedStart(worker)
         return false, "Dynamic Trading V2 server controls are unavailable."
     end
 
-    local spawned = DTNPCServerCore.SpawnOffscreenCompanionByUUID(uuid, player)
-    DTNPCServerCore.IssueOrderByUUID(uuid, player, {
+    local spawned = false
+    if DTNPCServerCore.SpawnOffscreenCompanionByUUID then
+        spawned = DTNPCServerCore.SpawnOffscreenCompanionByUUID(uuid, player) == true
+        debugCompanion("SpawnOffscreenCompanionByUUID workerID=" .. tostring(worker.workerID) .. " uuid=" .. tostring(uuid) .. " spawned=" .. tostring(spawned))
+    end
+    if not spawned and DTNPCServerCore.SpawnNearbyCompanionByUUID then
+        spawned = DTNPCServerCore.SpawnNearbyCompanionByUUID(uuid, player, 2, 5) == true
+        debugCompanion("SpawnNearbyCompanionByUUID fallback workerID=" .. tostring(worker.workerID) .. " uuid=" .. tostring(uuid) .. " spawned=" .. tostring(spawned))
+    end
+
+    local ordered = DTNPCServerCore.IssueOrderByUUID and DTNPCServerCore.IssueOrderByUUID(uuid, player, {
         state = "Follow",
         returnStatus = "Resting",
     })
+    debugCompanion("IssueOrderByUUID Follow workerID=" .. tostring(worker.workerID) .. " uuid=" .. tostring(uuid) .. " ordered=" .. tostring(ordered))
 
-    appendLog(worker, "Left home to join you as a travel companion.", getCurrentWorldHours(), "travel")
-    return spawned == true, uuid
+    if ordered ~= true then
+        debugCompanion("StartWorkerCompanion failed to issue follow order workerID=" .. tostring(worker.workerID) .. " uuid=" .. tostring(uuid))
+        if createdFresh and DynamicTrading_Roster and DynamicTrading_Roster.RemoveSpecificSoul then
+            DynamicTrading_Roster.RemoveSpecificSoul(uuid)
+            local liveCompanionData = getCompanionData(worker)
+            if liveCompanionData then
+                liveCompanionData.uuid = nil
+            end
+        end
+        restoreWorkerAfterFailedStart(worker)
+        return false, "Unable to issue companion follow order."
+    end
+
+    appendLog(worker, "Left home and started heading to your location.", getCurrentWorldHours(), "travel")
+    if not spawned then
+        debugCompanion("StartWorkerCompanion continuing after order-driven spawn workerID=" .. tostring(worker.workerID) .. " uuid=" .. tostring(uuid))
+    end
+    return true, uuid
 end
 
 function Companion.IssueWorkerCompanionOrder(player, workerID, order, args)
@@ -440,6 +716,13 @@ function Companion.BeginWorkerCompanionReturn(player, worker, reason)
         return false
     end
 
+    debugCompanion(
+        "BeginWorkerCompanionReturn workerID=" .. tostring(worker.workerID)
+            .. " uuid=" .. tostring(getCompanionUUID(worker))
+            .. " reason=" .. tostring(reason)
+            .. " presenceState=" .. tostring(worker.presenceState)
+    )
+
     local companionData = getCompanionData(worker)
     local uuid = getCompanionUUID(worker)
     local travelHours = getTravelHours()
@@ -462,7 +745,7 @@ function Companion.BeginWorkerCompanionReturn(player, worker, reason)
             returnStatus = "Resting",
             startDeparture = true,
         })
-        appendLog(worker, "Heading off to return home.", currentHour, "travel")
+        appendLog(worker, "Leaving your position and heading home.", currentHour, "travel")
         return true
     end
 
@@ -479,7 +762,7 @@ function Companion.BeginWorkerCompanionReturn(player, worker, reason)
     worker.jobEnabled = false
     companionData.stage = TRAVEL_STAGE_RETURNING
     companionData.awaitingDespawn = false
-    appendLog(worker, "Heading back home from companion duty.", currentHour, "travel")
+    appendLog(worker, "Heading home from your location.", currentHour, "travel")
     return true
 end
 
@@ -507,6 +790,12 @@ function Companion.OnSoulStatusChanged(uuid, status, npcData)
     if not uuid or not status then
         return
     end
+
+    debugCompanion(
+        "OnSoulStatusChanged uuid=" .. tostring(uuid)
+            .. " status=" .. tostring(status)
+            .. " linkedWorkerID=" .. tostring(npcData and npcData.linkedWorkerID)
+    )
 
     local linkedWorkerID = npcData and npcData.linkedWorkerID or nil
     local registry = getRegistry()
@@ -666,7 +955,7 @@ function Companion.UpdateTravelCompanionWorker(worker, ctx)
         end
         if worker.travelHoursRemaining <= 0 then
             Companion.MarkCompanionActive(worker)
-            appendLog(worker, "Arrived and is now traveling with you.", currentHour, "travel")
+            appendLog(worker, "Reached your location and is now traveling with you.", currentHour, "travel")
         else
             worker.state = Config.States.Working
         end

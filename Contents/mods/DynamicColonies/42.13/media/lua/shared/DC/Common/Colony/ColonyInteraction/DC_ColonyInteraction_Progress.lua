@@ -59,28 +59,31 @@ function Interaction.GetProgressDescriptor(worker, profile)
     end
 
     if jobKey == tostring((Config.JobTypes or {}).TravelCompanion or "TravelCompanion") then
-        local travelTemplate = nil
+        local activeText = nil
+        local captionText = nil
         if presenceState == tostring(states.CompanionToPlayer or "CompanionToPlayer") then
-            travelTemplate = Interaction.getInteractionEntry("Progress", "Common.TravelToSite")
+            activeText = "Heading to your location"
+            captionText = "Reaches you in {eta}"
         elseif presenceState == tostring(states.CompanionReturning or "CompanionReturning") then
-            travelTemplate = Interaction.getInteractionEntry("Progress", "Common.TravelToHome")
+            activeText = "Heading back home"
+            captionText = "Home in {eta}"
         end
 
-        if type(travelTemplate) == "table" then
+        if activeText then
             local totalHours = Interaction.getTravelTotalHours()
             local remainingWorldHours = math.max(0, tonumber(worker.travelHoursRemaining) or 0)
             local progressHours = math.max(0, totalHours - remainingWorldHours)
             tokens = Interaction.buildProgressTokens(worker, progressHours, totalHours, remainingWorldHours)
             return {
-                label = DynamicTrading.FormatInteractionString(travelTemplate.activeText, tokens),
-                displayText = DynamicTrading.FormatInteractionString(travelTemplate.activeText, tokens),
+                label = DynamicTrading.FormatInteractionString(activeText, tokens),
+                displayText = DynamicTrading.FormatInteractionString(activeText, tokens),
                 fillRatio = math.max(0, math.min(1, progressHours / totalHours)),
-                captionText = DynamicTrading.FormatInteractionString(travelTemplate.captionText, tokens),
+                captionText = DynamicTrading.FormatInteractionString(captionText, tokens),
                 summaryText = Interaction.formatDecimal(progressHours, 1) .. " / " .. Interaction.formatDecimal(totalHours, 1) .. "h",
                 progressHours = progressHours,
                 cycleHours = totalHours,
                 remainingWorldHours = remainingWorldHours,
-                color = travelTemplate.color
+                color = { r = 0.52, g = 0.78, b = 0.96, a = 1 }
             }
         end
     end

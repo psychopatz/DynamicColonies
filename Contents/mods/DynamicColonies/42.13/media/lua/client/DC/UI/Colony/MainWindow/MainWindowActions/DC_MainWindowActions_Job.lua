@@ -10,6 +10,14 @@ local function isFunction(value)
     return type(value) == "function"
 end
 
+local function debugJobAction(message)
+    local text = "[DC Job Debug][Client] " .. tostring(message)
+    print(text)
+    if DynamicTrading and DynamicTrading.Log then
+        DynamicTrading.Log("DTCommons", "Colony", "Job", tostring(message))
+    end
+end
+
 local function getConfig()
     local config = Internal.Config
     if type(config) ~= "table" then
@@ -41,6 +49,137 @@ local function getSelectedWorkerForAction(window)
     return window.selectedWorker or window.selectedWorkerSummary or nil
 end
 
+local function copyShallow(value)
+    if type(value) ~= "table" then
+        return value
+    end
+
+    local copy = {}
+    for key, entry in pairs(value) do
+        copy[key] = entry
+    end
+    return copy
+end
+
+local function getTravelHours(config, worker)
+    return math.max(
+        0,
+        tonumber(config.GetScavengeTravelHours and config.GetScavengeTravelHours(worker))
+            or tonumber(config.DEFAULT_SCAVENGE_TRAVEL_HOURS)
+            or 0
+    )
+end
+
+local function replaceCachedWorkerSummary(summary)
+    if type(summary) ~= "table" or not summary.workerID then
+        return
+    end
+
+    DC_MainWindow.cachedWorkers = DC_MainWindow.cachedWorkers or {}
+    for index, worker in ipairs(DC_MainWindow.cachedWorkers) do
+        if worker and worker.workerID == summary.workerID then
+            DC_MainWindow.cachedWorkers[index] = summary
+            return
+        end
+    end
+
+    DC_MainWindow.cachedWorkers[#DC_MainWindow.cachedWorkers + 1] = summary
+end
+
+local function replaceCachedWorkerDetail(worker)
+    if type(worker) ~= "table" or not worker.workerID then
+        return
+    end
+
+    DC_MainWindow.cachedDetails = DC_MainWindow.cachedDetails or {}
+    DC_MainWindow.cachedDetails[worker.workerID] = worker
+end
+
+local function applyOptimisticJobState(window, enabled, normalizedJob, presenceState)
+    if not window or not window.selectedWorkerSummary then
+        return
+    end
+
+    local config = getConfig()
+    local states = config.PresenceStates or {}
+    local activeWorker = getSelectedWorkerForAction(window)
+    local summary = copyShallow(window.selectedWorkerSummary)
+    local detail = copyShallow(window.selectedWorker or activeWorker or summary)
+    local travelHours = getTravelHours(config, detail)
+    local homeState = tostring(states.Home or "Home")
+
+    detail.workerID = detail.workerID or summary.workerID
+    summary.workerID = summary.workerID or detail.workerID
+
+    if normalizedJob == ((config.JobTypes or {}).TravelCompanion) then
+        if enabled then
+            detail.jobEnabled = true
+            detail.presenceState = states.CompanionToPlayer or "CompanionToPlayer"
+            detail.travelHoursRemaining = travelHours
+            detail.returnReason = nil
+            detail.state = config.States and config.States.Working or "Working"
+        elseif tostring(presenceState or "") ~= homeState then
+            detail.jobEnabled = false
+            detail.presenceState = states.CompanionReturning or "CompanionReturning"
+            detail.travelHoursRemaining = travelHours
+            detail.returnReason = (config.ReturnReasons and config.ReturnReasons.Manual) or "ManualRecall"
+            detail.state = config.States and config.States.Working or "Working"
+        else
+            detail.jobEnabled = false
+            detail.presenceState = states.Home or "Home"
+            detail.travelHoursRemaining = 0
+            detail.returnReason = nil
+            detail.state = config.States and config.States.Idle or "Idle"
+        end
+    elseif normalizedJob == ((config.JobTypes or {}).Scavenge) then
+        if enabled then
+            detail.jobEnabled = true
+            detail.presenceState = states.AwayToSite or "AwayToSite"
+            detail.travelHoursRemaining = travelHours
+            detail.returnReason = nil
+            detail.state = config.States and config.States.Working or "Working"
+        elseif tostring(presenceState or "") ~= homeState then
+            detail.jobEnabled = false
+            detail.presenceState = states.AwayToHome or "AwayToHome"
+            detail.travelHoursRemaining = travelHours
+            detail.returnReason = (config.ReturnReasons and config.ReturnReasons.Manual) or "ManualRecall"
+            detail.state = config.States and config.States.Idle or "Idle"
+        else
+            detail.jobEnabled = false
+            detail.presenceState = states.Home or "Home"
+            detail.travelHoursRemaining = 0
+            detail.returnReason = nil
+            detail.state = config.States and config.States.Idle or "Idle"
+        end
+    else
+        detail.jobEnabled = enabled == true
+        if detail.jobEnabled == false and tostring(detail.presenceState or "") == "" then
+            detail.presenceState = states.Home or "Home"
+        end
+    end
+
+    summary.jobEnabled = detail.jobEnabled
+    summary.presenceState = detail.presenceState
+    summary.travelHoursRemaining = detail.travelHoursRemaining
+    summary.returnReason = detail.returnReason
+    summary.state = detail.state
+    summary.jobType = detail.jobType or summary.jobType
+    summary.maxHp = detail.maxHp or summary.maxHp
+    summary.hp = detail.hp or summary.hp
+
+    window.selectedWorkerSummary = summary
+    window.selectedWorker = detail
+    replaceCachedWorkerSummary(summary)
+    replaceCachedWorkerDetail(detail)
+    if window.populateWorkerList then
+        window:populateWorkerList(DC_MainWindow.cachedWorkers)
+    end
+    if window.updateWorkerDetail then
+        window:updateWorkerDetail(detail)
+    end
+    window.syncStatusMutedFrames = math.max(tonumber(window.syncStatusMutedFrames) or 0, 45)
+end
+
 local function isUnemployedJob(worker)
     local config = getConfig()
     local normalizedJob = config.NormalizeJobType and config.NormalizeJobType((worker and worker.jobType) or nil) or tostring(worker and worker.jobType or "")
@@ -63,10 +202,10 @@ local function updateToggleJobStatus(window, enabled, normalizedJob, presenceSta
     if normalizedJob == ((config.JobTypes or {}).TravelCompanion) then
         local homeState = (config.PresenceStates or {}).Home
         window:updateStatus(
-            enabled and "Calling your companion in from home..."
+            enabled and "Calling your companion to your location..."
                 or ((presenceState and presenceState ~= homeState)
-                    and "Sending companion home..."
-                    or "Cancelling companion duty...")
+                    and "Stopping companion duty and sending them home..."
+                    or "Stopping companion duty...")
         )
         return
     end
@@ -75,6 +214,18 @@ local function updateToggleJobStatus(window, enabled, normalizedJob, presenceSta
 end
 
 local function sendToggleJobCommand(window, enabled, normalizedJob, presenceState)
+    debugJobAction(
+        "sendToggleJobCommand workerID=" .. tostring(window and window.selectedWorkerSummary and window.selectedWorkerSummary.workerID)
+            .. " enabled=" .. tostring(enabled)
+            .. " jobType=" .. tostring(normalizedJob)
+            .. " presenceState=" .. tostring(presenceState)
+    )
+
+    if normalizedJob == ((getConfig().JobTypes or {}).TravelCompanion)
+        or normalizedJob == ((getConfig().JobTypes or {}).Scavenge) then
+        applyOptimisticJobState(window, enabled, normalizedJob, presenceState)
+    end
+
     window:sendColonyCommand("SetWorkerJobEnabled", {
         workerID = window.selectedWorkerSummary.workerID,
         enabled = enabled
@@ -131,8 +282,10 @@ local function openScavengeStartConfirmation(window, enabled, normalizedJob, pre
 
     local function onConfirm(_, button)
         if button and button.internal == "YES" then
+            debugJobAction("Scavenge start confirmed for workerID=" .. tostring(window and window.selectedWorkerSummary and window.selectedWorkerSummary.workerID))
             sendToggleJobCommand(window, enabled, normalizedJob, presenceState)
         else
+            debugJobAction("Scavenge start cancelled for workerID=" .. tostring(window and window.selectedWorkerSummary and window.selectedWorkerSummary.workerID))
             window:updateStatus("Scavenging start cancelled. Add provisions first if needed.")
         end
     end
@@ -163,12 +316,12 @@ local function getStopJobConfirmationText(window, normalizedJob, presenceState)
     if normalizedJob == ((config.JobTypes or {}).TravelCompanion) then
         if tostring(presenceState or "") ~= homeState then
             return "Send " .. workerName .. " home from companion duty?\n\n"
-                .. "They will walk off, despawn, and then finish the trip home on the colony travel timer.\n\n"
+                .. "They will leave your position, despawn, and finish the trip home on the colony travel timer.\n\n"
                 .. "Press Yes to send them home, or No to keep them with you."
         end
 
         return "Cancel companion duty for " .. workerName .. "?\n\n"
-            .. "This keeps them home until you start the job again.\n\n"
+            .. "This keeps them at home until you call them to you again.\n\n"
             .. "Press Yes to cancel, or No to leave the job active."
     end
 
@@ -181,9 +334,19 @@ local function openStopJobConfirmation(window, enabled, normalizedJob, presenceS
 
     local function onConfirm(_, button)
         if button and button.internal == "YES" then
+            debugJobAction(
+                "Stop confirmed workerID=" .. tostring(window and window.selectedWorkerSummary and window.selectedWorkerSummary.workerID)
+                    .. " jobType=" .. tostring(normalizedJob)
+            )
             sendToggleJobCommand(window, enabled, normalizedJob, presenceState)
         else
-            window:updateStatus("Job stop cancelled.")
+            debugJobAction(
+                "Stop cancelled workerID=" .. tostring(window and window.selectedWorkerSummary and window.selectedWorkerSummary.workerID)
+                    .. " jobType=" .. tostring(normalizedJob)
+            )
+            window:updateStatus(normalizedJob == ((getConfig().JobTypes or {}).TravelCompanion)
+                and "Companion duty stop cancelled."
+                or "Job stop cancelled.")
         end
     end
 
@@ -222,6 +385,15 @@ function DC_MainWindow:onToggleJob()
         currentEnabled = self.selectedWorkerSummary.jobEnabled == true
     end
     local enabled = not currentEnabled
+
+    debugJobAction(
+        "onToggleJob workerID=" .. tostring(self.selectedWorkerSummary.workerID)
+            .. " currentEnabled=" .. tostring(currentEnabled)
+            .. " targetEnabled=" .. tostring(enabled)
+            .. " jobType=" .. tostring(normalizedJob)
+            .. " presenceState=" .. tostring(presenceState)
+            .. " state=" .. tostring(state)
+    )
 
     if enabled and normalizedJob == ((config.JobTypes or {}).Scavenge) then
         openScavengeStartConfirmation(self, enabled, normalizedJob, presenceState)
@@ -274,6 +446,17 @@ function DC_MainWindow:onCycleJob()
             end
 
             if changedJob then
+                if selectedJobType == ((config.JobTypes or {}).TravelCompanion) then
+                    local optimisticDetail = copyShallow(self.selectedWorker or worker or self.selectedWorkerSummary)
+                    optimisticDetail.jobType = selectedJobType
+                    optimisticDetail.profession = selectedJobType
+                    self.selectedWorker = optimisticDetail
+                    self.selectedWorkerSummary = copyShallow(self.selectedWorkerSummary)
+                    self.selectedWorkerSummary.jobType = selectedJobType
+                    replaceCachedWorkerDetail(optimisticDetail)
+                    replaceCachedWorkerSummary(self.selectedWorkerSummary)
+                    applyOptimisticJobState(self, true, selectedJobType, (config.PresenceStates or {}).Home)
+                end
                 self:sendColonyCommand("SetWorkerJobType", {
                     workerID = workerID,
                     jobType = selectedJobType

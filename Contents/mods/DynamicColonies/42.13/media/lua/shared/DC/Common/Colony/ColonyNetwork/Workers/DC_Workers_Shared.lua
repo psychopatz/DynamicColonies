@@ -28,6 +28,13 @@ local function getPresentation()
     return DC_Colony and DC_Colony.Presentation or nil
 end
 
+local function syncCompanionWorker(player, worker)
+    local companion = DC_Colony and DC_Colony.Companion or nil
+    if companion and companion.SyncActiveNPCFromWorker then
+        companion.SyncActiveNPCFromWorker(worker, true)
+    end
+end
+
 function Shared.normalizeLedgerIndexes(args)
     local indexes = {}
     local seen = {}
@@ -77,6 +84,7 @@ function Shared.saveAndRefreshProcessed(player, worker, syncProjection)
     if Presentation and Presentation.SyncWorker then
         Presentation.SyncWorker(worker, { player })
     end
+    syncCompanionWorker(player, worker)
     Internal.syncWorkerDetail(player, worker.workerID, nil, true)
     Internal.syncWorkerList(player)
     if syncProjection then
@@ -90,6 +98,7 @@ function Shared.saveAndRefreshBasic(player, worker, syncProjection)
     if Registry and Registry.Save then
         Registry.Save()
     end
+    syncCompanionWorker(player, worker)
     Internal.syncWorkerDetail(player, worker.workerID, nil, true)
     Internal.syncWorkerList(player)
     if syncProjection then

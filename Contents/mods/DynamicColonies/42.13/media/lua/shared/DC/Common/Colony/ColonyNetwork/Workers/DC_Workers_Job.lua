@@ -10,6 +10,14 @@ local Internal = Network.Internal or {}
 
 Network.Handlers = Network.Handlers or {}
 
+local function debugWorkerJob(message)
+    local text = "[DC Job Debug][Server] " .. tostring(message)
+    print(text)
+    if DynamicTrading and DynamicTrading.Log then
+        DynamicTrading.Log("DTCommons", "Colony", "Job", tostring(message))
+    end
+end
+
 local function canAssignJobType(worker, jobType)
     if Config.CanWorkerTakeJob then
         return Config.CanWorkerTakeJob(worker, jobType)
@@ -23,31 +31,54 @@ Network.Handlers.SetWorkerJobEnabled = function(player, args)
     local owner = Config.GetOwnerUsername(player)
     local worker = Registry.GetWorkerForOwner(owner, args.workerID)
     if not worker then return end
+    local normalizedJob = Config.NormalizeJobType and Config.NormalizeJobType(worker.jobType) or tostring(worker.jobType or "")
 
-    if args.enabled == true and Config.NormalizeJobType(worker.jobType) == ((Config.JobTypes or {}).Unemployed) then
+    debugWorkerJob(
+        "SetWorkerJobEnabled owner=" .. tostring(owner)
+            .. " workerID=" .. tostring(args.workerID)
+            .. " enabled=" .. tostring(args.enabled == true)
+            .. " jobType=" .. tostring(normalizedJob)
+            .. " presenceState=" .. tostring(worker.presenceState)
+            .. " state=" .. tostring(worker.state)
+    )
+
+    if args.enabled == true and normalizedJob == ((Config.JobTypes or {}).Unemployed) then
+        debugWorkerJob("Blocked start because worker is unemployed workerID=" .. tostring(args.workerID))
         Internal.syncNotice(player, "Assign a job first. Unemployed workers stay idle until you choose a role.", "error")
         Shared.saveAndRefreshBasic(player, worker)
         return
     end
 
-    local normalizedJob = Config.NormalizeJobType and Config.NormalizeJobType(worker.jobType) or tostring(worker.jobType or "")
     if args.enabled ~= true and normalizedJob == ((Config.JobTypes or {}).TravelCompanion) then
         local homeState = tostring((Config.PresenceStates or {}).Home or "Home")
         if tostring(worker.presenceState or "") ~= homeState then
+            debugWorkerJob("Starting companion return workerID=" .. tostring(args.workerID))
             Companion.BeginWorkerCompanionReturn(player, worker, Config.ReturnReasons.Manual)
         else
+            debugWorkerJob("Disabling companion duty at home workerID=" .. tostring(args.workerID))
             Registry.SetWorkerJobEnabled(worker, false)
         end
     else
         Registry.SetWorkerJobEnabled(worker, args.enabled == true)
         if args.enabled == true and normalizedJob == ((Config.JobTypes or {}).TravelCompanion) then
             local started, reason = Companion.StartWorkerCompanion(player, worker)
+            debugWorkerJob(
+                "Companion.StartWorkerCompanion workerID=" .. tostring(args.workerID)
+                    .. " started=" .. tostring(started)
+                    .. " reason=" .. tostring(reason)
+            )
             if not started then
                 Registry.SetWorkerJobEnabled(worker, false)
                 Internal.syncNotice(player, reason or "Unable to start Travel Companion.", "error")
             end
         end
     end
+    debugWorkerJob(
+        "Saving worker after SetWorkerJobEnabled workerID=" .. tostring(args.workerID)
+            .. " jobEnabled=" .. tostring(worker.jobEnabled)
+            .. " presenceState=" .. tostring(worker.presenceState)
+            .. " state=" .. tostring(worker.state)
+    )
     Shared.saveAndRefreshProcessed(player, worker)
 end
 

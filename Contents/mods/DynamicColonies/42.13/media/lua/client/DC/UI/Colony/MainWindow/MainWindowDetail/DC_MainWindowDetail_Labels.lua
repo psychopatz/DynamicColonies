@@ -86,13 +86,13 @@ function Internal.getScavengePresenceDetailLabel(worker)
     local states = config.PresenceStates or {}
     if normalizedJob == tostring((config.JobTypes or {}).TravelCompanion or "TravelCompanion") then
         if presenceState == states.CompanionToPlayer then
-            return "Walking To Player"
+            return "Walking To You"
         end
         if presenceState == states.CompanionReturning then
             return "Walking Home"
         end
         if presenceState == states.CompanionActive then
-            return "Traveling With Player"
+            return "With You"
         end
         return "Home"
     end

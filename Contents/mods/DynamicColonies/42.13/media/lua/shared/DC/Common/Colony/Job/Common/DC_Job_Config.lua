@@ -82,7 +82,12 @@ Config.JobProfiles = {
         jobType = Config.JobTypes.TravelCompanion,
         displayName = "Travel Companion",
         siteType = nil,
-        requiredToolTags = {},
+        requiredToolTags = {
+            "Colony.Combat.Melee",
+            "Colony.Combat.Ranged",
+            "Colony.Combat.Ammo",
+            "Colony.Carry.Backpack",
+        },
         cycleHours = 24,
         dailyCaloriesNeed = 2300,
         dailyHydrationNeed = 1900,

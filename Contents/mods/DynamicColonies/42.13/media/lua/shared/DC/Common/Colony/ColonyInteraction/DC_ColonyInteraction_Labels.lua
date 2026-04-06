@@ -104,6 +104,10 @@ function Interaction.GetPlaceLabel(worker)
         return tostring(worker and worker.greenhouseWorkLabel or "Greenhouse")
     end
 
+    if jobKey == tostring((Config.JobTypes or {}).TravelCompanion or "TravelCompanion") then
+        return "Your Location"
+    end
+
     local locationKey = jobKey ~= "" and ("JobPlaces." .. jobKey .. ".Default") or nil
     if locationKey then
         local place = DynamicTrading.ResolveInteractionString("Colony", "Locations", locationKey)
@@ -131,10 +135,10 @@ function Interaction.GetDisplayStateLabel(worker)
 
     if jobKey == tostring((Config.JobTypes or {}).TravelCompanion or "TravelCompanion") then
         if presenceState == tostring(states.CompanionToPlayer or "CompanionToPlayer") then
-            return tostring(Interaction.getInteractionEntry("Progress", "Common.TravelToSite.stateLabel") or "Walking")
+            return "Joining You"
         end
         if presenceState == tostring(states.CompanionReturning or "CompanionReturning") then
-            return tostring(Interaction.getInteractionEntry("Progress", "Common.TravelToHome.stateLabel") or "Walking")
+            return "Walking Home"
         end
         if presenceState == tostring(states.CompanionActive or "CompanionActive") then
             return "Companion"

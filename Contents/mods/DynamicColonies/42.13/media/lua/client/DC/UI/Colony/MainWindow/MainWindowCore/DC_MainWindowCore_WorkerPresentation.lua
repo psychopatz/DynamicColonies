@@ -117,10 +117,13 @@ function Internal.getWorkerPresenceLabel(worker)
             local presenceState = tostring(worker and worker.presenceState or "")
             local states = config.PresenceStates or {}
             if presenceState == states.CompanionActive then
-                return "Companion"
+                return "With You"
             end
-            if presenceState == states.CompanionToPlayer or presenceState == states.CompanionReturning then
-                return "Walking"
+            if presenceState == states.CompanionToPlayer then
+                return "Walking To You"
+            end
+            if presenceState == states.CompanionReturning then
+                return "Walking Home"
             end
             return "Home"
         end
