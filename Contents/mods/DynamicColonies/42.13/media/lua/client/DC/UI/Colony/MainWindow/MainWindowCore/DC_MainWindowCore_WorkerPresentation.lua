@@ -117,10 +117,10 @@ function Internal.getWorkerPresenceLabel(worker)
             local presenceState = tostring(worker and worker.presenceState or "")
             local states = config.PresenceStates or {}
             if presenceState == states.CompanionActive then
-                return "With You"
+                return worker and worker.companionCommandStatus or "With You"
             end
             if presenceState == states.CompanionToPlayer then
-                return "Walking To You"
+                return worker and worker.companionCommandStatus or "Walking To You"
             end
             if presenceState == states.CompanionReturning then
                 return "Walking Home"
@@ -139,6 +139,28 @@ function Internal.getWorkerPresenceLabel(worker)
         return "Walking"
     end
     return "Home"
+end
+
+function Internal.getCompanionCommandStatus(worker)
+    local config = Internal.Config or {}
+    local normalizedJob = config.NormalizeJobType and config.NormalizeJobType(worker and worker.jobType) or tostring(worker and worker.jobType or "")
+    if normalizedJob ~= tostring((config.JobTypes or {}).TravelCompanion or "TravelCompanion") then
+        return nil
+    end
+
+    if worker and worker.companionCommandStatus then
+        return tostring(worker.companionCommandStatus)
+    end
+
+    local companionData = type(worker and worker.companion) == "table" and worker.companion or {}
+    local commander = tostring(companionData.commanderUsername or worker and worker.companionCommanderUsername or "")
+    if companionData.commandInvalidSinceMs ~= nil or worker and worker.companionCommandInvalid == true then
+        return "Commander invalid, returning soon"
+    end
+    if commander ~= "" then
+        return "Commanded by " .. commander
+    end
+    return "No commander"
 end
 
 function Internal.getWorkerStateLabel(worker)

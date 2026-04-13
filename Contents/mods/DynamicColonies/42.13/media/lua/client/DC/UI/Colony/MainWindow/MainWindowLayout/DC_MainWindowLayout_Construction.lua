@@ -99,6 +99,11 @@ function DC_MainWindow:createChildren()
     self.btnFaction:initialise()
     self:addChild(self.btnFaction)
 
+    self.btnCompanionCommand = ISButton:new(860, buttonY, 110, 28, "Command", self, self.onCompanionCommand)
+    self.btnCompanionCommand:initialise()
+    self.btnCompanionCommand:setEnable(false)
+    self:addChild(self.btnCompanionCommand)
+
     self.workerList = Internal.ColonyWorkerList:new(10, listY, listWidth, contentHeight)
     self.workerList:initialise()
     self.workerList:instantiate()

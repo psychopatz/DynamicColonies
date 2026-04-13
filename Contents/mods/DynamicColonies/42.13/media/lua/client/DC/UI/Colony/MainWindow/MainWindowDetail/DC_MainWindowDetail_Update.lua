@@ -70,6 +70,23 @@ local function formatDurationHours(hoursLeft)
     return tostring(math.floor(safeHours + 0.5)) .. "h"
 end
 
+local function getLocalUsername()
+    local player = getSpecificPlayer and getSpecificPlayer(0) or getPlayer and getPlayer() or nil
+    if player and player.getUsername then
+        local username = tostring(player:getUsername() or "")
+        if username ~= "" then
+            return username
+        end
+    end
+    return nil
+end
+
+local function getCompanionCommander(worker)
+    local companionData = type(worker and worker.companion) == "table" and worker.companion or {}
+    local username = tostring(companionData.commanderUsername or worker and worker.companionCommanderUsername or "")
+    return username ~= "" and username or nil
+end
+
 local function buildActivityLogText(worker)
     if isFunction(Internal.buildActivityLogText) then
         return Internal.buildActivityLogText(worker)
@@ -167,6 +184,10 @@ function DC_MainWindow:updateWorkerDetail(worker)
         if self.btnWarehouse then
             self.btnWarehouse:setEnable(false)
         end
+        if self.btnCompanionCommand then
+            self.btnCompanionCommand:setTitle("Command")
+            self.btnCompanionCommand:setEnable(false)
+        end
         return
     end
 
@@ -185,6 +206,11 @@ function DC_MainWindow:updateWorkerDetail(worker)
     local unemployedJob = tostring((config.JobTypes or {}).Unemployed or "Unemployed")
     local text = ""
     text = text .. " <RGB:1,1,1> <SIZE:Medium> Worker Status <LINE> "
+    if normalizedJobType == (config.JobTypes and config.JobTypes.TravelCompanion) and Internal.getCompanionCommandStatus then
+        text = text .. " <RGB:0.72,0.72,0.72> Companion Command: <RGB:1,1,1> "
+            .. tostring(Internal.getCompanionCommandStatus(worker) or "No commander")
+            .. " <LINE> "
+    end
     text = text .. " <RGB:0.72,0.72,0.72> Tool State: <RGB:1,1,1> " .. tostring(worker.toolState or "Missing") .. " <LINE> "
     text = text .. " <RGB:0.72,0.72,0.72> Housed: <RGB:1,1,1> " .. formatHousingSummary(worker) .. " <LINE> "
     if jobSkillEffects and jobSkillEffects.skillID then
@@ -271,5 +297,22 @@ function DC_MainWindow:updateWorkerDetail(worker)
 
     if self.btnWarehouse then
         self.btnWarehouse:setEnable(true)
+    end
+
+    if self.btnCompanionCommand then
+        local canUseCompanionCommand = normalizedJobType == (config.JobTypes and config.JobTypes.TravelCompanion)
+            and worker.jobEnabled == true
+            and stateLabel ~= deadState
+        if canUseCompanionCommand then
+            local commander = getCompanionCommander(worker)
+            if commander and commander == getLocalUsername() then
+                self.btnCompanionCommand:setTitle("Transfer Cmd")
+            else
+                self.btnCompanionCommand:setTitle("Claim Cmd")
+            end
+        else
+            self.btnCompanionCommand:setTitle("Command")
+        end
+        self.btnCompanionCommand:setEnable(canUseCompanionCommand)
     end
 end

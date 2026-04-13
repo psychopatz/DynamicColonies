@@ -7,6 +7,9 @@ local Registry = DC_Colony.Registry
 local Skills = DC_Colony.Skills
 
 function Registry.GetWorkerSummary(worker)
+    local companionData = type(worker.companion) == "table" and worker.companion or {}
+    local commanderUsername = tostring(companionData.commanderUsername or "")
+    local commandInvalid = companionData.commandInvalidSinceMs ~= nil
     local profile = Config.GetJobProfile(worker.jobType)
     local workTarget = Config.GetEffectiveWorkTarget and Config.GetEffectiveWorkTarget(worker, profile)
         or (Config.GetEffectiveCycleHours and Config.GetEffectiveCycleHours(worker, profile))
@@ -148,6 +151,11 @@ function Registry.GetWorkerSummary(worker)
         assignedProjectMaterialState = worker.assignedProjectMaterialState,
         assignedProjectProgress = worker.assignedProjectProgress,
         assignedProjectRequired = worker.assignedProjectRequired,
+        companionCommanderUsername = commanderUsername ~= "" and commanderUsername or nil,
+        companionCommandVersion = companionData.commandVersion,
+        companionCommandInvalid = commandInvalid,
+        companionCommandStatus = commandInvalid and "Commander invalid, returning soon"
+            or (commanderUsername ~= "" and ("Commanded by " .. commanderUsername) or "No commander"),
         isFemale = worker.isFemale,
         identitySeed = worker.identitySeed
     }

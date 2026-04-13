@@ -49,6 +49,84 @@ local function getSelectedWorkerForAction(window)
     return window.selectedWorker or window.selectedWorkerSummary or nil
 end
 
+local function getLocalPlayer()
+    return getSpecificPlayer and getSpecificPlayer(0) or getPlayer and getPlayer() or nil
+end
+
+local function getLocalUsername()
+    local player = getLocalPlayer()
+    if player and player.getUsername then
+        local username = tostring(player:getUsername() or "")
+        if username ~= "" then
+            return username
+        end
+    end
+    return nil
+end
+
+local function getCompanionCommander(worker)
+    local companionData = type(worker and worker.companion) == "table" and worker.companion or {}
+    local username = tostring(companionData.commanderUsername or worker and worker.companionCommanderUsername or "")
+    return username ~= "" and username or nil
+end
+
+local function addUniqueUsername(list, seen, username)
+    username = tostring(username or "")
+    if username == "" or seen[username] then
+        return
+    end
+    seen[username] = true
+    list[#list + 1] = username
+end
+
+local function getOwnedFactionStatus()
+    if DC_System and DC_System.GetOwnedFactionStatus then
+        local status = DC_System.GetOwnedFactionStatus()
+        if type(status) == "table" then
+            return status
+        end
+    end
+    return DC_MainWindow.cachedOwnedFactionStatus
+end
+
+local function getCompanionTransferCandidates()
+    local status = getOwnedFactionStatus() or {}
+    local faction = type(status.faction) == "table" and status.faction or {}
+    local localUsername = getLocalUsername()
+    local candidates = {}
+    local seen = {}
+
+    addUniqueUsername(candidates, seen, status.authorityOwner or status.ownerUsername or status.leaderUsername)
+    addUniqueUsername(candidates, seen, faction.authorityOwner or faction.ownerUsername or faction.leaderUsername)
+
+    local memberSources = {
+        status.memberUsernames,
+        status.members,
+        faction.memberUsernames,
+        faction.members
+    }
+    for _, source in ipairs(memberSources) do
+        if type(source) == "table" then
+            for _, entry in ipairs(source) do
+                if type(entry) == "table" then
+                    addUniqueUsername(candidates, seen, entry.username or entry.name)
+                else
+                    addUniqueUsername(candidates, seen, entry)
+                end
+            end
+        end
+    end
+
+    local filtered = {}
+    for _, username in ipairs(candidates) do
+        if username ~= localUsername then
+            filtered[#filtered + 1] = username
+        end
+    end
+    table.sort(filtered)
+    return filtered
+end
+
 local function copyShallow(value)
     if type(value) ~= "table" then
         return value
@@ -353,6 +431,59 @@ local function openStopJobConfirmation(window, enabled, normalizedJob, presenceS
     local modal = ISModalDialog:new(0, 0, 400, 200, text, true, nil, onConfirm, nil)
     modal:initialise()
     modal:addToUIManager()
+end
+
+function DC_MainWindow:onCompanionCommand()
+    local worker = getSelectedWorkerForAction(self)
+    if not worker or not worker.workerID then
+        self:updateStatus("Select a companion worker first.")
+        return
+    end
+
+    local config = getConfig()
+    local normalizedJob = config.NormalizeJobType and config.NormalizeJobType(worker.jobType) or tostring(worker.jobType or "")
+    if normalizedJob ~= tostring((config.JobTypes or {}).TravelCompanion or "TravelCompanion") then
+        self:updateStatus("Command authority only applies to Travel Companion workers.")
+        return
+    end
+    if worker.jobEnabled ~= true then
+        self:updateStatus("Start companion duty before assigning command.")
+        return
+    end
+
+    local commander = getCompanionCommander(worker)
+    local localUsername = getLocalUsername()
+    if commander == nil or commander ~= localUsername then
+        self:sendColonyCommand("ClaimCompanionCommand", {
+            workerID = worker.workerID
+        })
+        self:updateStatus("Trying to claim companion command. Stand within 6 tiles of the companion.")
+        return
+    end
+
+    local candidates = getCompanionTransferCandidates()
+    if #candidates == 0 then
+        self:updateStatus("No other colony members are available for command transfer.")
+        return
+    end
+
+    local x = (getMouseX and getMouseX()) or (self:getAbsoluteX() + 20)
+    local y = (getMouseY and getMouseY()) or (self:getAbsoluteY() + 40)
+    local menu = ISContextMenu.get(0, x, y)
+    local heading = menu:addOption("Transfer companion command to...")
+    if heading then
+        heading.notAvailable = true
+    end
+
+    for _, username in ipairs(candidates) do
+        menu:addOption(username, nil, function()
+            self:sendColonyCommand("TransferCompanionCommand", {
+                workerID = worker.workerID,
+                username = username
+            })
+            self:updateStatus("Transferring companion command to " .. tostring(username) .. "...")
+        end)
+    end
 end
 
 function DC_MainWindow:onToggleJob()

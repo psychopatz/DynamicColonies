@@ -8,6 +8,8 @@ local TRAVEL_STAGE_OUTBOUND = "Outbound"
 local TRAVEL_STAGE_ACTIVE = "Active"
 local TRAVEL_STAGE_DEPARTING = "Departing"
 local TRAVEL_STAGE_RETURNING = "Returning"
+local COMMAND_CLAIM_RANGE_TILES = 6
+local COMMAND_INVALID_GRACE_MS = 5 * 60 * 1000
 
 local function debugCompanion(message)
     local text = "[DC Companion Debug] " .. tostring(message)
@@ -38,6 +40,127 @@ end
 
 local function getCurrentWorldHours()
     return (Config.GetCurrentWorldHours and Config.GetCurrentWorldHours()) or Config.GetCurrentHour()
+end
+
+local function getCurrentMillis()
+    if getTimeInMillis then
+        return tonumber(getTimeInMillis()) or 0
+    end
+
+    local gt = getGameTime and getGameTime() or nil
+    if gt and gt.getWorldAgeHours then
+        return math.floor((tonumber(gt:getWorldAgeHours()) or 0) * 3600000)
+    end
+
+    return os and os.time and (os.time() * 1000) or 0
+end
+
+local function getPlayerUsername(player)
+    if player and player.getUsername then
+        local username = player:getUsername()
+        if username and username ~= "" then
+            return tostring(username)
+        end
+    end
+    return nil
+end
+
+local function getPlayerOnlineID(player)
+    if player and player.getOnlineID then
+        return tonumber(player:getOnlineID())
+    end
+    return nil
+end
+
+local function getOnlinePlayerByUsername(username)
+    local target = tostring(username or "")
+    if target == "" then
+        return nil
+    end
+
+    local localPlayer = getSpecificPlayer and getSpecificPlayer(0) or getPlayer and getPlayer() or nil
+    if localPlayer and localPlayer.getUsername and tostring(localPlayer:getUsername() or "") == target then
+        return localPlayer
+    end
+
+    local players = getOnlinePlayers and getOnlinePlayers() or nil
+    if players then
+        for index = 0, players:size() - 1 do
+            local player = players:get(index)
+            if player and player.getUsername and tostring(player:getUsername() or "") == target then
+                return player
+            end
+        end
+    end
+
+    return nil
+end
+
+local function isOnlinePlayerValid(username)
+    local player = getOnlinePlayerByUsername(username)
+    if not player then
+        return false, nil
+    end
+    if player.isDead and player:isDead() then
+        return false, player
+    end
+    return true, player
+end
+
+local function getActualFactionForUsername(username)
+    if not DynamicTrading_Factions or not DynamicTrading_Factions.GetPlayerFaction then
+        return nil
+    end
+    return DynamicTrading_Factions.GetPlayerFaction(tostring(username or ""))
+end
+
+local function isUsernameInWorkerColony(worker, username)
+    local normalizedUsername = tostring(username or "")
+    if not worker or normalizedUsername == "" then
+        return false
+    end
+
+    local owner = Config.GetOwnerUsername and Config.GetOwnerUsername(worker.ownerUsername) or tostring(worker.ownerUsername or "")
+    if normalizedUsername == owner then
+        return true
+    end
+
+    local faction = getActualFactionForUsername(normalizedUsername)
+    if type(faction) ~= "table" then
+        return false
+    end
+
+    if tostring(faction.leadershipState or "Active") ~= "Active" then
+        return false
+    end
+    if tostring(faction.leaderUsername or "") ~= owner then
+        return false
+    end
+    if normalizedUsername == owner then
+        return true
+    end
+    for _, memberUsername in ipairs(faction.memberUsernames or {}) do
+        if tostring(memberUsername or "") == normalizedUsername then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function resolveWorkerFromCommandContext(workerOrNPC)
+    local registry = getRegistry()
+    if type(workerOrNPC) ~= "table" then
+        return nil
+    end
+    if workerOrNPC.workerID then
+        return workerOrNPC
+    end
+    local linkedWorkerID = workerOrNPC.linkedWorkerID
+    if linkedWorkerID and registry and registry.GetWorkerRaw then
+        return registry.GetWorkerRaw(linkedWorkerID)
+    end
+    return nil
 end
 
 local function getWorkerSkillLevel(worker, skillID)
@@ -97,6 +220,72 @@ local function getCompanionUUID(worker)
     return uuid ~= "" and uuid or nil
 end
 
+local saveSoul
+local getSoul
+
+local function getCommandVersion(companionData)
+    return math.max(0, math.floor(tonumber(companionData and companionData.commandVersion) or 0))
+end
+
+local function mirrorCommanderToNPC(worker, npcData)
+    if not worker or not npcData then
+        return false
+    end
+
+    local companionData = getCompanionData(worker)
+    npcData.dcCommanderUsername = companionData and companionData.commanderUsername or nil
+    npcData.dcCommanderOnlineID = companionData and companionData.commanderOnlineID or nil
+    npcData.dcCommandVersion = companionData and companionData.commandVersion or nil
+    return true
+end
+
+local function syncCommanderToSoul(worker)
+    local uuid = getCompanionUUID(worker)
+    local npcData = uuid and getSoul(uuid) or nil
+    if not uuid or not npcData then
+        return false
+    end
+
+    mirrorCommanderToNPC(worker, npcData)
+    saveSoul(uuid, npcData)
+
+    if not isClient() or isServer() then
+        local updates = {
+            dcCommanderUsername = npcData.dcCommanderUsername,
+            dcCommanderOnlineID = npcData.dcCommanderOnlineID,
+            dcCommandVersion = npcData.dcCommandVersion,
+        }
+        if DTNPCServerCore and DTNPCServerCore.UpdateNPCByUUID then
+            DTNPCServerCore.UpdateNPCByUUID(uuid, updates, true)
+        end
+    end
+    return true
+end
+
+local function isFollowerCommandState(state)
+    return state == "Follow"
+        or state == "ProtectRanged"
+        or state == "ProtectMelee"
+        or state == "ProtectAuto"
+end
+
+local function issueCommanderFollowOrder(worker, targetPlayer, stateOverride, combatOrderOverride)
+    local uuid = getCompanionUUID(worker)
+    if not uuid or not targetPlayer or not DTNPCServerCore or not DTNPCServerCore.IssueOrderByUUID then
+        return false
+    end
+
+    local npcData = getSoul(uuid)
+    local state = stateOverride or (npcData and isFollowerCommandState(tostring(npcData.state or "")) and tostring(npcData.state or nil)) or "Follow"
+    local combatOrder = combatOrderOverride or npcData and npcData.combatOrder or nil
+    return DTNPCServerCore.IssueOrderByUUID(uuid, targetPlayer, {
+        state = state,
+        combatOrder = combatOrder,
+        returnStatus = "Resting",
+        systemCompanionOrder = true,
+    }) == true
+end
+
 local function findExistingCompanionSoul(worker)
     if not worker or not DynamicTrading_Roster or not DynamicTrading_Roster.GetSoul then
         return nil
@@ -132,13 +321,13 @@ local function findExistingCompanionSoul(worker)
     return nil
 end
 
-local function saveSoul(uuid, npcData)
+saveSoul = function(uuid, npcData)
     if uuid and npcData and DynamicTrading_Roster and DynamicTrading_Roster.SaveSoul then
         DynamicTrading_Roster.SaveSoul(uuid, npcData)
     end
 end
 
-local function getSoul(uuid)
+getSoul = function(uuid)
     if not uuid or not DynamicTrading_Roster or not DynamicTrading_Roster.GetSoul then
         return nil
     end
@@ -446,6 +635,7 @@ local function setSoulCompanionFlags(worker, npcData, active)
     npcData.dcCompanionOwner = worker.ownerUsername
     npcData.dcCompanionStage = companionData and companionData.stage or nil
     npcData.dcCompanionActive = active == true
+    mirrorCommanderToNPC(worker, npcData)
 end
 
 local function getMedicalBandageTier(fullType)
@@ -497,6 +687,9 @@ local function finalizeReturnTravel(worker, currentHour)
     companionData.currentOrder = nil
     companionData.returnReason = nil
     companionData.returnTravelHours = nil
+    companionData.commanderUsername = nil
+    companionData.commanderOnlineID = nil
+    companionData.commandInvalidSinceMs = nil
     appendLog(worker, "Returned home after companion duty.", currentHour, "travel")
 end
 
@@ -611,6 +804,194 @@ function Companion.SyncActiveNPCFromWorker(worker, shouldBroadcast)
     return syncedSoul or liveSynced
 end
 
+function Companion.CanPlayerCommandCompanion(player, workerOrNPC)
+    local username = getPlayerUsername(player)
+    local worker = resolveWorkerFromCommandContext(workerOrNPC)
+    if not username or not worker or not Companion.IsTravelCompanionWorker(worker) then
+        return false, "Companion command is unavailable."
+    end
+
+    if not isUsernameInWorkerColony(worker, username) then
+        return false, "You are not part of this companion's colony."
+    end
+
+    local companionData = getCompanionData(worker)
+    local commander = tostring((companionData and companionData.commanderUsername)
+        or (type(workerOrNPC) == "table" and workerOrNPC.dcCommanderUsername)
+        or "")
+    if commander == "" then
+        return false, "No commander assigned. Use Claim Command while nearby."
+    end
+
+    if commander ~= username then
+        return false, "Only " .. commander .. " can command this companion. Use Claim Command while nearby to take over."
+    end
+
+    return true, nil, worker
+end
+
+function Companion.AssignWorkerCompanionCommander(player, worker, targetUsername, reason)
+    if not worker or not Companion.IsTravelCompanionWorker(worker) then
+        return false, "Companion command is unavailable."
+    end
+
+    local username = targetUsername and tostring(targetUsername or "") or getPlayerUsername(player)
+    if username == "" then
+        return false, "A target username is required."
+    end
+
+    if not isUsernameInWorkerColony(worker, username) then
+        return false, "That player is not part of this companion's colony."
+    end
+
+    local companionData = getCompanionData(worker)
+    local _, onlinePlayer = isOnlinePlayerValid(username)
+    companionData.commanderUsername = username
+    companionData.commanderOnlineID = onlinePlayer and getPlayerOnlineID(onlinePlayer) or nil
+    companionData.commandVersion = getCommandVersion(companionData) + 1
+    companionData.commandAssignedAtMs = getCurrentMillis()
+    companionData.commandInvalidSinceMs = nil
+    companionData.commandReason = reason or "assigned"
+    syncCommanderToSoul(worker)
+    return true, username
+end
+
+function Companion.RefreshCompanionCommanderValidity(worker)
+    if not worker or not Companion.IsTravelCompanionWorker(worker) then
+        return true
+    end
+
+    local companionData = getCompanionData(worker)
+    local commander = tostring(companionData.commanderUsername or "")
+    local presenceState = tostring(worker.presenceState or "")
+    local activeState = Config.PresenceStates and Config.PresenceStates.CompanionActive or "CompanionActive"
+    local toPlayerState = Config.PresenceStates and Config.PresenceStates.CompanionToPlayer or "CompanionToPlayer"
+    if presenceState ~= activeState and presenceState ~= toPlayerState then
+        companionData.commandInvalidSinceMs = nil
+        return true
+    end
+
+    local validOnline = false
+    if commander ~= "" and isUsernameInWorkerColony(worker, commander) then
+        validOnline = isOnlinePlayerValid(commander)
+    end
+
+    if validOnline then
+        if companionData.commandInvalidSinceMs ~= nil then
+            companionData.commandInvalidSinceMs = nil
+            syncCommanderToSoul(worker)
+            saveRegistry()
+        end
+        return true
+    end
+
+    local now = getCurrentMillis()
+    if companionData.commandInvalidSinceMs == nil then
+        companionData.commandInvalidSinceMs = now
+        local uuid = getCompanionUUID(worker)
+        if uuid and DTNPCServerCore and DTNPCServerCore.IssueOrderByUUID then
+            DTNPCServerCore.IssueOrderByUUID(uuid, { ownerUsername = worker.ownerUsername }, {
+                state = "Stay",
+                returnStatus = "Resting",
+                systemCompanionOrder = true,
+            })
+        end
+        syncCommanderToSoul(worker)
+        saveRegistry()
+        return false
+    end
+
+    if now - (tonumber(companionData.commandInvalidSinceMs) or now) >= COMMAND_INVALID_GRACE_MS then
+        Companion.BeginWorkerCompanionReturn(nil, worker, Config.ReturnReasons.Manual)
+        saveRegistry()
+        return false
+    end
+
+    return false
+end
+
+function Companion.ClaimWorkerCompanionCommand(player, workerID)
+    local username = getPlayerUsername(player)
+    local registry = getRegistry()
+    local owner = Config.GetOwnerUsername(player)
+    local worker = registry and registry.GetWorkerForOwner and registry.GetWorkerForOwner(owner, workerID) or nil
+    if not username or not worker or not Companion.IsTravelCompanionWorker(worker) then
+        return false, "Companion is unavailable.", nil
+    end
+    if not isUsernameInWorkerColony(worker, username) then
+        return false, "You are not part of this companion's colony.", worker
+    end
+
+    local uuid = getCompanionUUID(worker)
+    local zombie = nil
+    if uuid and DTNPCServerCore and DTNPCServerCore.GetNPCDataByUUID then
+        zombie = DTNPCServerCore.GetNPCDataByUUID(uuid)
+    end
+    if not zombie then
+        return false, "Move near the live companion before claiming command.", worker
+    end
+
+    local dz = math.abs((tonumber(player:getZ()) or 0) - (tonumber(zombie:getZ()) or 0))
+    local dx = (tonumber(player:getX()) or 0) - (tonumber(zombie:getX()) or 0)
+    local dy = (tonumber(player:getY()) or 0) - (tonumber(zombie:getY()) or 0)
+    local distance = math.sqrt((dx * dx) + (dy * dy))
+    if dz > 1 or distance > COMMAND_CLAIM_RANGE_TILES then
+        return false, "Move closer to claim command.", worker
+    end
+
+    local ok, result = Companion.AssignWorkerCompanionCommander(player, worker, username, "claimed")
+    if ok then
+        issueCommanderFollowOrder(worker, player, "Follow", nil)
+        appendLog(worker, username .. " claimed companion command.", getCurrentWorldHours(), "travel")
+        saveRegistry()
+    end
+    return ok, ok and "Command claimed." or result, worker
+end
+
+function Companion.TransferWorkerCompanionCommand(player, workerID, targetUsername)
+    local username = getPlayerUsername(player)
+    local target = tostring(targetUsername or "")
+    local registry = getRegistry()
+    local owner = Config.GetOwnerUsername(player)
+    local worker = registry and registry.GetWorkerForOwner and registry.GetWorkerForOwner(owner, workerID) or nil
+    if not username or not worker or not Companion.IsTravelCompanionWorker(worker) then
+        return false, "Companion is unavailable.", nil
+    end
+
+    local companionData = getCompanionData(worker)
+    if tostring(companionData.commanderUsername or "") ~= username then
+        return false, "Only the current commander can transfer command.", worker
+    end
+    if target == "" then
+        return false, "A target username is required.", worker
+    end
+    if not isUsernameInWorkerColony(worker, target) then
+        return false, "That player is not part of this companion's colony.", worker
+    end
+
+    local ok, result = Companion.AssignWorkerCompanionCommander(player, worker, target, "transferred")
+    if ok then
+        local online, targetPlayer = isOnlinePlayerValid(target)
+        if online then
+            issueCommanderFollowOrder(worker, targetPlayer, "Follow", nil)
+        else
+            companionData.commandInvalidSinceMs = getCurrentMillis()
+            local uuid = getCompanionUUID(worker)
+            if uuid and DTNPCServerCore and DTNPCServerCore.IssueOrderByUUID then
+                DTNPCServerCore.IssueOrderByUUID(uuid, { ownerUsername = worker.ownerUsername }, {
+                    state = "Stay",
+                    returnStatus = "Resting",
+                    systemCompanionOrder = true,
+                })
+            end
+            syncCommanderToSoul(worker)
+        end
+        appendLog(worker, username .. " transferred companion command to " .. target .. ".", getCurrentWorldHours(), "travel")
+        saveRegistry()
+    end
+    return ok, ok and "Command transferred to " .. target .. "." or result, worker
+end
+
 function Companion.StartWorkerCompanion(player, worker)
     if not player or not worker or not Companion.IsTravelCompanionWorker(worker) then
         debugCompanion("StartWorkerCompanion rejected: invalid player/worker context")
@@ -643,6 +1024,7 @@ function Companion.StartWorkerCompanion(player, worker)
     companionData.returnReason = nil
     companionData.returnTravelHours = nil
     companionData.homeRecoveryLogged = false
+    Companion.AssignWorkerCompanionCommander(player, worker, getPlayerUsername(player), "started")
 
     worker.presenceState = Config.PresenceStates.CompanionToPlayer
     worker.travelHoursRemaining = getTravelHours()
@@ -675,6 +1057,7 @@ function Companion.StartWorkerCompanion(player, worker)
     local ordered = DTNPCServerCore.IssueOrderByUUID and DTNPCServerCore.IssueOrderByUUID(uuid, player, {
         state = "Follow",
         returnStatus = "Resting",
+        systemCompanionOrder = true,
     })
     debugCompanion("IssueOrderByUUID Follow workerID=" .. tostring(worker.workerID) .. " uuid=" .. tostring(uuid) .. " ordered=" .. tostring(ordered))
 
@@ -710,6 +1093,11 @@ function Companion.IssueWorkerCompanionOrder(player, workerID, order, args)
         return false, "Companion is unavailable."
     end
 
+    local canCommand, commandReason = Companion.CanPlayerCommandCompanion(player, worker)
+    if not canCommand then
+        return false, commandReason or "Only the current commander can command this companion."
+    end
+
     args = type(args) == "table" and args or {}
     args.state = order
     local changed = DTNPCServerCore.IssueOrderByUUID(uuid, player, args)
@@ -734,6 +1122,7 @@ function Companion.BeginWorkerCompanionReturn(player, worker, reason)
     local currentHour = getCurrentWorldHours()
     companionData.returnReason = reason or Config.ReturnReasons.Manual
     companionData.returnTravelHours = travelHours
+    companionData.commandInvalidSinceMs = nil
     worker.returnReason = companionData.returnReason
 
     if worker.presenceState == Config.PresenceStates.CompanionActive and uuid and DTNPCServerCore and DTNPCServerCore.IssueOrderByUUID then
@@ -749,6 +1138,7 @@ function Companion.BeginWorkerCompanionReturn(player, worker, reason)
             state = "Stay",
             returnStatus = "Resting",
             startDeparture = true,
+            systemCompanionOrder = true,
         })
         appendLog(worker, "Leaving your position and heading home.", currentHour, "travel")
         return true
@@ -759,6 +1149,9 @@ function Companion.BeginWorkerCompanionReturn(player, worker, reason)
         worker.returnReason = nil
         companionData.stage = nil
         companionData.awaitingDespawn = false
+        companionData.commanderUsername = nil
+        companionData.commanderOnlineID = nil
+        companionData.commandInvalidSinceMs = nil
         return true
     end
 
@@ -998,6 +1391,10 @@ function Companion.UpdateTravelCompanionWorker(worker, ctx)
     end
 
     if presenceState == Config.PresenceStates.CompanionToPlayer then
+        Companion.RefreshCompanionCommanderValidity(worker)
+        if tostring(worker.presenceState or "") ~= presenceState then
+            return true
+        end
         worker.travelHoursRemaining = math.max(0, tonumber(worker.travelHoursRemaining) or 0)
         if deltaHours > 0 then
             worker.travelHoursRemaining = math.max(0, worker.travelHoursRemaining - deltaHours)
@@ -1031,6 +1428,10 @@ function Companion.UpdateTravelCompanionWorker(worker, ctx)
     end
 
     if presenceState == Config.PresenceStates.CompanionActive then
+        Companion.RefreshCompanionCommanderValidity(worker)
+        if tostring(worker.presenceState or "") ~= presenceState then
+            return true
+        end
         if companionData.awaitingDespawn == true then
             worker.state = Config.States.Working
             return true

@@ -58,7 +58,13 @@ Network.Handlers.SetWorkerJobEnabled = function(player, args)
     end
 
     if args.enabled ~= true and normalizedJob == ((Config.JobTypes or {}).TravelCompanion) then
+        local canCommand, commandReason = Companion.CanPlayerCommandCompanion(player, worker)
         local homeState = tostring((Config.PresenceStates or {}).Home or "Home")
+        if tostring(worker.presenceState or "") ~= homeState and not canCommand then
+            Internal.syncNotice(player, commandReason or "Only the current commander can send this companion home.", "error", true)
+            Shared.saveAndRefreshBasic(player, worker)
+            return
+        end
         if tostring(worker.presenceState or "") ~= homeState then
             debugWorkerJob("Starting companion return workerID=" .. tostring(args.workerID))
             Companion.BeginWorkerCompanionReturn(player, worker, Config.ReturnReasons.Manual)
@@ -132,6 +138,48 @@ Network.Handlers.SetWorkerJobType = function(player, args)
         end
     end
     Shared.saveAndRefreshProcessed(player, worker)
+end
+
+Network.Handlers.ClaimCompanionCommand = function(player, args)
+    if not args or not args.workerID then return end
+    local ok, reason, worker = Companion.ClaimWorkerCompanionCommand(player, args.workerID)
+    if not ok then
+        Internal.syncNotice(player, reason or "Unable to claim companion command.", "error", true)
+    else
+        Internal.syncNotice(player, reason or "Companion command claimed.", "info", false)
+    end
+    if worker then
+        Shared.saveAndRefreshBasic(player, worker)
+    else
+        Internal.syncWorkerList(player)
+    end
+end
+
+Network.Handlers.TransferCompanionCommand = function(player, args)
+    if not args or not args.workerID then return end
+    local ok, reason, worker = Companion.TransferWorkerCompanionCommand(player, args.workerID, args.username)
+    if not ok then
+        Internal.syncNotice(player, reason or "Unable to transfer companion command.", "error", true)
+    else
+        Internal.syncNotice(player, reason or "Companion command transferred.", "info", false)
+    end
+    if worker then
+        Shared.saveAndRefreshBasic(player, worker)
+    else
+        Internal.syncWorkerList(player)
+    end
+end
+
+Network.Handlers.RequestCompanionCommandStatus = function(player, args)
+    if not args or not args.workerID then return end
+    local owner = Config.GetOwnerUsername(player)
+    local worker = Registry.GetWorkerForOwner(owner, args.workerID)
+    if worker and Companion.RefreshCompanionCommanderValidity then
+        Companion.RefreshCompanionCommanderValidity(worker)
+        Shared.saveAndRefreshBasic(player, worker)
+    else
+        Internal.syncWorkerDetail(player, args.workerID, nil, true)
+    end
 end
 
 return Network
