@@ -7,6 +7,6 @@ icon=portrait.png
 require=\DynamicTradingCommon
 loadModAfter=\DynamicTradingCommon
 category=features
-version=0.0.2
+version=0.1.0
 versionMin=42.13
 
