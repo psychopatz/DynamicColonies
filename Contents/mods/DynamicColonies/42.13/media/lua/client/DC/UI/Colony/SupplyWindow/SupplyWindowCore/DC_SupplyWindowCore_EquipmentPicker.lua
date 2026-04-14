@@ -115,6 +115,62 @@ function Internal.getEquipmentPendingDedupeSignature(entry)
     return tostring(entry and entry.assignedRequirementKey or "") .. "|" .. tostring(signature or "")
 end
 
+function Internal.getAmmoTypeForWeaponFullType(fullType)
+    local key = tostring(fullType or "")
+    if key == "" or not getScriptManager then
+        return nil
+    end
+
+    local scriptItem = getScriptManager():getItem(key)
+    local ammoType = scriptItem and scriptItem.getAmmoType and scriptItem:getAmmoType() or nil
+    ammoType = tostring(ammoType or "")
+    return ammoType ~= "" and ammoType or nil
+end
+
+function Internal.getWorkerAssignedRangedWeaponEntry(worker)
+    for _, entry in ipairs(worker and worker.toolLedger or {}) do
+        if tostring(entry and entry.assignedRequirementKey or "") == "Colony.Combat.Ranged" then
+            return entry
+        end
+    end
+
+    for _, entry in ipairs(worker and worker.toolLedger or {}) do
+        if Internal.entryMatchesEquipmentRequirement(entry, "Colony.Combat.Ranged", worker) then
+            return entry
+        end
+    end
+
+    return nil
+end
+
+function Internal.getWorkerRangedAmmoFullType(worker)
+    local ranged = Internal.getWorkerAssignedRangedWeaponEntry(worker)
+    return Internal.getAmmoTypeForWeaponFullType(ranged and ranged.fullType)
+end
+
+function Internal.isAmmoRequirementActive(worker)
+    return tostring(Internal.getWorkerRangedAmmoFullType(worker) or "") ~= ""
+end
+
+function Internal.entryMatchesRangedAmmo(entry, worker)
+    local ammoFullType = tostring(Internal.getWorkerRangedAmmoFullType(worker) or "")
+    local entryFullType = tostring(entry and entry.fullType or "")
+    if ammoFullType == "" or entryFullType == "" then
+        return false
+    end
+
+    if entryFullType == ammoFullType or entryFullType == ammoFullType .. "Box" then
+        return true
+    end
+
+    local boxedBase = entryFullType:gsub("Box$", "")
+    if boxedBase == ammoFullType then
+        return true
+    end
+
+    return false
+end
+
 function Internal.buildEquipmentPickerCandidates(window, requirementKey)
     local candidates = {}
     local worker = window and window.workerData or nil
@@ -122,11 +178,15 @@ function Internal.buildEquipmentPickerCandidates(window, requirementKey)
     local seenPlayerItems = {}
 
     for _, entry in ipairs(window and window.playerEntries or {}) do
+        local targetRequirementKey = tostring(requirementKey or "")
+        local matchesRequirement = targetRequirementKey == "Colony.Combat.Ammo"
+            and Internal.entryMatchesRangedAmmo(entry, worker)
+            or Internal.entryMatchesEquipmentRequirement(entry, requirementKey, worker)
         if entry
             and entry.kind == "player"
             and entry.canAssignTool == true
             and entry.isDynamicTradingLocked ~= true
-            and Internal.entryMatchesEquipmentRequirement(entry, requirementKey, worker) then
+            and matchesRequirement then
             local itemID = entry.itemID
             if itemID ~= nil and not seenPlayerItems[itemID] then
                 seenPlayerItems[itemID] = true
@@ -137,6 +197,7 @@ function Internal.buildEquipmentPickerCandidates(window, requirementKey)
                     fullType = entry.fullType,
                     texture = entry.texture,
                     itemID = entry.itemID,
+                    entryID = entry.entryID,
                     assignedRequirementKey = tostring(requirementKey or ""),
                     statText = Internal.getEquipmentDurabilityText and Internal.getEquipmentDurabilityText(entry) or "",
                     sourceEntry = entry,
@@ -147,8 +208,12 @@ function Internal.buildEquipmentPickerCandidates(window, requirementKey)
 
     local warehouseLedger = getWorkerWarehouseEquipmentLedger(worker)
     for index, ledgerEntry in ipairs(warehouseLedger or {}) do
+        local targetRequirementKey = tostring(requirementKey or "")
+        local matchesRequirement = targetRequirementKey == "Colony.Combat.Ammo"
+            and Internal.entryMatchesRangedAmmo(ledgerEntry, worker)
+            or Internal.entryMatchesEquipmentRequirement(ledgerEntry, requirementKey, worker)
         if (not registryInternal or not registryInternal.IsEquipmentEntryUsable or registryInternal.IsEquipmentEntryUsable(ledgerEntry))
-            and Internal.entryMatchesEquipmentRequirement(ledgerEntry, requirementKey, worker) then
+            and matchesRequirement then
             local entry = Internal.buildWorkerToolEntry and Internal.buildWorkerToolEntry(ledgerEntry, index) or ledgerEntry
             if entry then
                 candidates[#candidates + 1] = {
@@ -158,6 +223,7 @@ function Internal.buildEquipmentPickerCandidates(window, requirementKey)
                     fullType = entry.fullType,
                     texture = entry.texture,
                     ledgerIndex = index,
+                    entryID = entry.entryID,
                     assignedRequirementKey = tostring(requirementKey or ""),
                     statText = Internal.getEquipmentDurabilityText and Internal.getEquipmentDurabilityText(entry) or "",
                     sourceEntry = entry,

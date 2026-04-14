@@ -116,12 +116,13 @@ function ColonySupplyList:doDrawItem(y, item, alt)
         self:drawText(arrow, 8, y + 13, 0.88, 0.88, 0.88, 1, UIFont.Small)
     end
 
-    if entry.texture then
+    local texture = entry.texture or (Internal.resolveEntryTexture and Internal.resolveEntryTexture(entry) or nil)
+    if texture then
         local alpha = 1
         if presentation.dimmed then
             alpha = 0.35
         end
-        self:drawTextureScaled(entry.texture, contentX, y + 7, 28, 28, alpha, 1, 1, 1)
+        self:drawTextureScaled(texture, contentX, y + 7, 28, 28, alpha, 1, 1, 1)
     end
 
     local textR, textG, textB = 0.9, 0.9, 0.9

@@ -180,7 +180,7 @@ function Internal.buildGroupedRows(entries, activeTab, side, window)
                     displayName = first.displayName,
                     fullType = first.fullType,
                     provisionType = first.provisionType,
-                    texture = first.texture or (Internal.getTextureForFullType and Internal.getTextureForFullType(first.fullType) or nil),
+                    texture = first.texture or (Internal.peekTextureForFullType and Internal.peekTextureForFullType(first.fullType) or nil),
                     childEntries = entriesForGroup,
                     childCount = #entriesForGroup,
                     totalWeight = 0,
@@ -208,6 +208,7 @@ function Internal.buildGroupedRows(entries, activeTab, side, window)
                     usedDelta = first.usedDelta,
                     keepOnDeplete = first.keepOnDeplete == true,
                     assignedRequirementKey = first.assignedRequirementKey,
+                    transferPending = false,
                 }
 
                 for _, child in ipairs(entriesForGroup) do
@@ -226,6 +227,7 @@ function Internal.buildGroupedRows(entries, activeTab, side, window)
                     header.hasEquipmentRequirementMatch = header.hasEquipmentRequirementMatch or child.hasEquipmentRequirementMatch == true
                     header.isUsableEquipment = header.isUsableEquipment or child.isUsableEquipment == true
                     header.pending = header.pending or child.pending == true
+                    header.transferPending = header.transferPending or child.transferPending == true
                 end
 
                 header.calories = header.totalCalories

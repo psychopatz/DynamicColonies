@@ -78,6 +78,7 @@ function StarterWorkers.CreateStarterWorker(ownerUsername, slot, options)
         isFemale = npcData.isFemale,
         identitySeed = npcData.identitySeed,
         visualID = npcData.visualID,
+        loadout = npcData.loadout or npcData,
         hp = npcData.hp or npcData.health or (npcData.combatHealth and npcData.combatHealth.current),
         maxHp = npcData.maxHp or npcData.healthMax or (npcData.combatHealth and npcData.combatHealth.max)
     }

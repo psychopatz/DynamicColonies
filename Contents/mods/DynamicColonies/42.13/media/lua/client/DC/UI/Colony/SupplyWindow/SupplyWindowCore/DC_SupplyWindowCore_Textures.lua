@@ -196,3 +196,74 @@ function Internal.getTextureForFullType(fullType)
     return cache[fullType] or nil
 end
 
+function Internal.peekTextureForFullType(fullType)
+    if not fullType then
+        return nil
+    end
+
+    local cache = Internal.TextureCache or {}
+    local cached = cache[tostring(fullType)]
+    return cached ~= false and cached or nil
+end
+
+function Internal.queueTextureForFullType(fullType)
+    local key = tostring(fullType or "")
+    if key == "" then
+        return nil
+    end
+
+    local cached = Internal.peekTextureForFullType(key)
+    if cached then
+        return cached
+    end
+
+    local cache = Internal.TextureCache or {}
+    if cache[key] == false then
+        return nil
+    end
+
+    Internal.TextureQueue = Internal.TextureQueue or {}
+    Internal.TextureQueueSet = Internal.TextureQueueSet or {}
+    if not Internal.TextureQueueSet[key] then
+        Internal.TextureQueueSet[key] = true
+        Internal.TextureQueue[#Internal.TextureQueue + 1] = key
+    end
+    return nil
+end
+
+function Internal.resolveEntryTexture(entry)
+    if not entry then
+        return nil
+    end
+    if entry.texture then
+        return entry.texture
+    end
+
+    local fullType = entry.iconFullType or entry.fullType
+    local cached = Internal.queueTextureForFullType(fullType)
+    if cached then
+        entry.texture = cached
+    end
+    return entry.texture
+end
+
+function Internal.processTextureQueue(batchSize)
+    local queue = Internal.TextureQueue
+    if type(queue) ~= "table" or #queue <= 0 then
+        return false
+    end
+
+    local set = Internal.TextureQueueSet or {}
+    Internal.TextureQueueSet = set
+    local limit = math.max(1, tonumber(batchSize) or tonumber(Internal.ICON_RESOLVE_BATCH_SIZE) or 1)
+    local processed = 0
+
+    while #queue > 0 and processed < limit do
+        local fullType = table.remove(queue, 1)
+        set[fullType] = nil
+        Internal.getTextureForFullType(fullType)
+        processed = processed + 1
+    end
+
+    return #queue > 0
+end

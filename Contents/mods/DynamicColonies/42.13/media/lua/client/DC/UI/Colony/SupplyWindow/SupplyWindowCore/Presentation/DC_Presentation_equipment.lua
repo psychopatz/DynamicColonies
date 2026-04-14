@@ -62,16 +62,24 @@ function Internal.getMissingEquipmentPlaceholderEntries(worker)
     local entries = {}
 
     for _, definition in ipairs(getRequirementDefinitions(worker)) do
-        if not workerHasRequirementDefinition(worker, definition) then
+        local requirementKey = tostring(definition and definition.requirementKey or "")
+        local skipRequirement = requirementKey == "Colony.Combat.Ammo"
+            and not (Internal.isAmmoRequirementActive and Internal.isAmmoRequirementActive(worker))
+
+        if not skipRequirement and not workerHasRequirementDefinition(worker, definition) then
+            local iconFullType = definition.iconFullType
+            if requirementKey == "Colony.Combat.Ammo" and Internal.getWorkerRangedAmmoFullType then
+                iconFullType = Internal.getWorkerRangedAmmoFullType(worker) or iconFullType
+            end
             entries[#entries + 1] = Internal.buildWorkerToolPlaceholderEntry({
-                requirementKey = definition.requirementKey,
+                requirementKey = requirementKey,
                 displayName = definition.label,
                 hintText = definition.hintText,
                 reasonText = definition.reasonText,
-                searchText = definition.searchText or definition.requirementKey,
+                searchText = definition.searchText or requirementKey,
                 requirementTags = definition.requirementTags or { definition.requirementKey },
                 supportedFullTypes = definition.supportedFullTypes,
-                iconFullType = definition.iconFullType,
+                iconFullType = iconFullType,
             })
         end
     end

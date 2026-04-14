@@ -20,6 +20,13 @@ function Registry.CreateWorker(ownerUsername, template)
     local currentHour = (Config.GetCurrentWorldHours and Config.GetCurrentWorldHours()) or Config.GetCurrentHour()
     local starterCalories, starterHydration = Internal.GetStarterReserveTotals(template)
 
+    local sourceLoadout = Internal.NormalizeSourceLoadout and Internal.NormalizeSourceLoadout(template.sourceLoadout or template.loadout)
+        or (template.sourceLoadout or template.loadout)
+    local templateToolLedger = Internal.CopyShallow(template.toolLedger)
+    if #templateToolLedger <= 0 then
+        templateToolLedger = Internal.BuildToolLedgerFromLoadout and Internal.BuildToolLedgerFromLoadout(sourceLoadout) or {}
+    end
+
     local worker = {
         colonyID = colonyID,
         ownerUsername = owner,
@@ -61,7 +68,7 @@ function Registry.CreateWorker(ownerUsername, template)
         starvationHours = tonumber(template.starvationHours) or 0,
         dehydrationHours = tonumber(template.dehydrationHours) or 0,
         nutritionLedger = Internal.BuildStarterNutritionLedger(template),
-        toolLedger = Internal.CopyShallow(template.toolLedger),
+        toolLedger = templateToolLedger,
         baseCarryWeightOverride = tonumber(template.baseCarryWeightOverride) or tonumber(template.baseCarryWeight) or tonumber(template.maxCarryWeight) or nil,
         haulLedger = Internal.CopyShallow(template.haulLedger),
         outputLedger = Internal.CopyShallow(template.outputLedger),
@@ -80,6 +87,7 @@ function Registry.CreateWorker(ownerUsername, template)
         visualID = template.visualID,
         sourceNPCID = template.sourceNPCID,
         sourceNPCType = template.sourceNPCType,
+        sourceLoadout = Internal.CopyShallow(sourceLoadout),
         detailVersion = tonumber(template.detailVersion) or 1
     }
 

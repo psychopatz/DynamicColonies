@@ -23,6 +23,13 @@ local function canDropHaulEntries(window)
 end
 
 function DC_SupplyWindow:canTransferWithWorker(showStatus)
+    if self:hasPendingSupplyTransfers() then
+        if showStatus ~= false then
+            self:updateStatus("A storage transfer is still being confirmed.")
+        end
+        return false
+    end
+
     if Internal.isWarehouseView and Internal.isWarehouseView(self) then
         return true
     end

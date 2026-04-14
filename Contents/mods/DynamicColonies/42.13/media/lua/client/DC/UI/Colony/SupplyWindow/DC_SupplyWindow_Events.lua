@@ -98,6 +98,10 @@ local function onServerCommand(module, command, args)
         if args and args.popup == true and DC_Colony.UI and DC_Colony.UI.ShowNoticeModal then
             DC_Colony.UI.ShowNoticeModal(args.message)
         end
+    elseif command == "SupplyTransferResult" then
+        if DC_SupplyWindow.instance.onSupplyTransferResult then
+            DC_SupplyWindow.instance:onSupplyTransferResult(args)
+        end
     end
 end
 

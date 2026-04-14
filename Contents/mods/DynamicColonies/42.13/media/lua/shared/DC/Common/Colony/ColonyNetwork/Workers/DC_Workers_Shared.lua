@@ -35,6 +35,79 @@ local function syncCompanionWorker(player, worker)
     end
 end
 
+local function getPlayerTransferOwner(player)
+    local Config = getConfig()
+    return Config and Config.GetOwnerUsername and Config.GetOwnerUsername(player) or tostring(player and player.getUsername and player:getUsername() or "local")
+end
+
+function Shared.normalizeItemIDs(args)
+    local itemIDs = {}
+    local seen = {}
+
+    for _, itemID in ipairs(args and args.itemIDs or {}) do
+        local key = tostring(itemID or "")
+        if key ~= "" and not seen[key] then
+            seen[key] = true
+            itemIDs[#itemIDs + 1] = itemID
+        end
+    end
+
+    if args and args.itemID then
+        local key = tostring(args.itemID or "")
+        if key ~= "" and not seen[key] then
+            itemIDs[#itemIDs + 1] = args.itemID
+        end
+    end
+
+    return itemIDs
+end
+
+function Shared.beginItemTransferLocks(player, itemIDs)
+    Internal.ActiveSupplyItemTransfers = Internal.ActiveSupplyItemTransfers or {}
+    local owner = getPlayerTransferOwner(player)
+    local reserved = {}
+    local rejected = {}
+
+    for _, itemID in ipairs(itemIDs or {}) do
+        local key = tostring(owner) .. "|" .. tostring(itemID or "")
+        if Internal.ActiveSupplyItemTransfers[key] then
+            rejected[#rejected + 1] = {
+                itemID = itemID,
+                reason = "already_processing",
+            }
+        else
+            Internal.ActiveSupplyItemTransfers[key] = true
+            reserved[#reserved + 1] = {
+                itemID = itemID,
+                key = key,
+            }
+        end
+    end
+
+    return reserved, rejected
+end
+
+function Shared.releaseItemTransferLocks(reserved)
+    for _, lock in ipairs(reserved or {}) do
+        if lock and lock.key and Internal.ActiveSupplyItemTransfers then
+            Internal.ActiveSupplyItemTransfers[lock.key] = nil
+        end
+    end
+end
+
+function Shared.syncSupplyTransferResult(player, args, result)
+    result = result or {}
+    Internal.sendResponse(player, (getConfig() or {}).COMMAND_MODULE or "DColony", "SupplyTransferResult", {
+        requestID = args and args.requestID or nil,
+        requestKind = args and args.requestKind or nil,
+        command = args and args.command or nil,
+        acceptedItemIDs = result.acceptedItemIDs or {},
+        rejected = result.rejected or {},
+        movedCount = math.max(0, tonumber(result.movedCount) or #(result.acceptedItemIDs or {})),
+        message = result.message,
+    })
+end
+
 function Shared.normalizeLedgerIndexes(args)
     local indexes = {}
     local seen = {}
@@ -87,6 +160,27 @@ function Shared.saveAndRefreshProcessed(player, worker, syncProjection)
     syncCompanionWorker(player, worker)
     Internal.syncWorkerDetail(player, worker.workerID, nil, true)
     Internal.syncWorkerList(player)
+    if syncProjection then
+        Internal.syncWarehouse(player, nil, true)
+    end
+end
+
+function Shared.saveAndRefreshSupplyTransfer(player, worker, syncProjection)
+    local Registry = getRegistry()
+    local Sim = getSim()
+    local Presentation = getPresentation()
+
+    if Registry and Registry.Save then
+        Registry.Save()
+    end
+    if Sim and Sim.ProcessWorker then
+        Sim.ProcessWorker(worker, Shared.getCurrentWorldHours())
+    end
+    if Presentation and Presentation.SyncWorker then
+        Presentation.SyncWorker(worker, { player })
+    end
+    syncCompanionWorker(player, worker)
+    Internal.syncWorkerDetail(player, worker.workerID, nil, true)
     if syncProjection then
         Internal.syncWarehouse(player, nil, true)
     end

@@ -119,6 +119,7 @@ function Registry.AddNutritionEntry(worker, entry)
         return false
     end
     worker.nutritionLedger = worker.nutritionLedger or {}
+    entry.entryID = entry.entryID or (Internal.GenerateLedgerEntryID and Internal.GenerateLedgerEntryID("prov") or nil)
     local calories = 0
     local hydration = 0
     if Nutrition and Nutrition.SanitizeLedgerEntry then
@@ -170,23 +171,31 @@ function Registry.AddToolEntryForRequirement(worker, entry, requirementKey)
         return false
     end
 
+    worker.toolLedger = worker.toolLedger or {}
+    local insertIndex = findRequirementInsertIndex(worker, targetKey)
+    local replacingEntry = insertIndex and worker.toolLedger[insertIndex] or nil
+    local replacingWeight = replacingEntry and getEntryWeight(replacingEntry.fullType, replacingEntry.qty) or 0
     local requestedQty = math.max(1, tonumber(normalized.qty) or 1)
-    if Registry.GetFittingInventoryQuantity(worker, normalized.fullType, requestedQty) < requestedQty then
+    local requiredWeight = getEntryWeight(normalized.fullType, requestedQty)
+    if not replacingEntry and Registry.GetFittingInventoryQuantity(worker, normalized.fullType, requestedQty) < requestedQty then
         return false
+    end
+    if replacingEntry then
+        local state = Registry.GetInventoryWeightState(worker)
+        local adjustedRemaining = math.max(0, tonumber(state and state.remainingWeight) or 0) + replacingWeight
+        if requiredWeight > 0 and requiredWeight > adjustedRemaining + 0.0001 then
+            return false
+        end
     end
 
     normalized.assignedRequirementKey = targetKey
-    worker.toolLedger = worker.toolLedger or {}
-    local insertIndex = findRequirementInsertIndex(worker, targetKey)
     if insertIndex then
-        table.insert(worker.toolLedger, insertIndex, normalized)
+        worker.toolLedger[insertIndex] = normalized
     else
         worker.toolLedger[#worker.toolLedger + 1] = normalized
     end
 
-    if not Internal.ApplyToolTags(worker, normalized.tags or {}) then
-        Internal.MarkToolCacheDirty(worker)
-    end
+    Internal.MarkToolCacheDirty(worker)
     return true
 end
 

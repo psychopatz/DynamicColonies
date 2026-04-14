@@ -45,23 +45,44 @@ local function syncRottenProvisionNotice(player, rottenCount)
     )
 end
 
+local function rejectItem(rejected, itemID, reason)
+    rejected[#rejected + 1] = {
+        itemID = itemID,
+        reason = tostring(reason or "rejected"),
+    }
+end
+
+local function buildTransferMessage(targetLabel, movedCount, rejectedCount)
+    if movedCount > 0 and rejectedCount > 0 then
+        return "Stored " .. tostring(movedCount) .. " item" .. (movedCount == 1 and "" or "s")
+            .. " in " .. tostring(targetLabel) .. "; " .. tostring(rejectedCount) .. " failed."
+    end
+    if movedCount > 0 then
+        return "Stored " .. tostring(movedCount) .. " item" .. (movedCount == 1 and "" or "s")
+            .. " in " .. tostring(targetLabel) .. "."
+    end
+    return tostring(rejectedCount) .. " item" .. (rejectedCount == 1 and "" or "s") .. " could not be stored."
+end
+
 Network.Handlers.DepositWorkerSupplies = function(player, args)
     if not args or not args.workerID then return end
 
     local owner = Config.GetOwnerUsername(player)
     local worker = Registry.GetWorkerForOwner(owner, args.workerID)
-    if not worker then return end
-
-    local itemIDs = args.itemIDs or {}
-    if args.itemID then
-        itemIDs[#itemIDs + 1] = args.itemID
+    if not worker then
+        Shared.syncSupplyTransferResult(player, args, { message = "That worker could not be found.", rejected = {} })
+        return
     end
+
+    local reserved, rejected = Shared.beginItemTransferLocks(player, Shared.normalizeItemIDs(args))
+    local acceptedItemIDs = {}
 
     local eligibleCount = 0
     local movedCount = 0
     local blockedCount = 0
     local rottenCount = 0
-    for _, itemID in ipairs(itemIDs) do
+    for _, lock in ipairs(reserved) do
+        local itemID = lock.itemID
         local invItem = Internal.getInventoryItemByID(player, itemID)
         if invItem then
             local entry, reason = Nutrition.BuildEntryFromItem(invItem)
@@ -70,14 +91,28 @@ Network.Handlers.DepositWorkerSupplies = function(player, args)
                 if Registry.AddNutritionEntry(worker, entry) then
                     Internal.removeInventoryItem(invItem)
                     movedCount = movedCount + 1
+                    acceptedItemIDs[#acceptedItemIDs + 1] = itemID
                 else
                     blockedCount = blockedCount + 1
+                    rejectItem(rejected, itemID, "capacity")
                 end
             elseif isRottenProvisionRejection(reason) then
                 rottenCount = rottenCount + 1
+                rejectItem(rejected, itemID, "rotten")
+            else
+                rejectItem(rejected, itemID, "not_provision")
             end
+        else
+            rejectItem(rejected, itemID, "missing")
         end
     end
+    Shared.releaseItemTransferLocks(reserved)
+    Shared.syncSupplyTransferResult(player, args, {
+        acceptedItemIDs = acceptedItemIDs,
+        rejected = rejected,
+        movedCount = movedCount,
+        message = buildTransferMessage("NPC inventory", movedCount, #rejected),
+    })
 
     if movedCount <= 0 and eligibleCount > 0 then
         Internal.syncNotice(player, "NPC inventory is full. No provisions could be deposited.", "error", true)
@@ -101,7 +136,7 @@ Network.Handlers.DepositWorkerSupplies = function(player, args)
     end
     syncRottenProvisionNotice(player, rottenCount)
 
-    Shared.saveAndRefreshProcessed(player, worker)
+    Shared.saveAndRefreshSupplyTransfer(player, worker)
 end
 
 Network.Handlers.DepositWarehouseSupplies = function(player, args)
@@ -109,18 +144,20 @@ Network.Handlers.DepositWarehouseSupplies = function(player, args)
 
     local owner = Config.GetOwnerUsername(player)
     local worker = Registry.GetWorkerForOwner(owner, args.workerID)
-    if not worker then return end
-
-    local itemIDs = args.itemIDs or {}
-    if args.itemID then
-        itemIDs[#itemIDs + 1] = args.itemID
+    if not worker then
+        Shared.syncSupplyTransferResult(player, args, { message = "That worker could not be found.", rejected = {} })
+        return
     end
+
+    local reserved, rejected = Shared.beginItemTransferLocks(player, Shared.normalizeItemIDs(args))
+    local acceptedItemIDs = {}
 
     local eligibleCount = 0
     local movedCount = 0
     local blockedCount = 0
     local rottenCount = 0
-    for _, itemID in ipairs(itemIDs) do
+    for _, lock in ipairs(reserved) do
+        local itemID = lock.itemID
         local invItem = Internal.getInventoryItemByID(player, itemID)
         if invItem then
             local entry, reason = Nutrition.BuildEntryFromItem(invItem)
@@ -129,14 +166,28 @@ Network.Handlers.DepositWarehouseSupplies = function(player, args)
                 if Warehouse.DepositProvisionEntry(owner, entry) then
                     Internal.removeInventoryItem(invItem)
                     movedCount = movedCount + 1
+                    acceptedItemIDs[#acceptedItemIDs + 1] = itemID
                 else
                     blockedCount = blockedCount + 1
+                    rejectItem(rejected, itemID, "capacity")
                 end
             elseif isRottenProvisionRejection(reason) then
                 rottenCount = rottenCount + 1
+                rejectItem(rejected, itemID, "rotten")
+            else
+                rejectItem(rejected, itemID, "not_provision")
             end
+        else
+            rejectItem(rejected, itemID, "missing")
         end
     end
+    Shared.releaseItemTransferLocks(reserved)
+    Shared.syncSupplyTransferResult(player, args, {
+        acceptedItemIDs = acceptedItemIDs,
+        rejected = rejected,
+        movedCount = movedCount,
+        message = buildTransferMessage("warehouse", movedCount, #rejected),
+    })
 
     if movedCount <= 0 and eligibleCount > 0 then
         Internal.syncNotice(player, "Warehouse is full. No supplies could be stored.", "error", true)
@@ -160,7 +211,7 @@ Network.Handlers.DepositWarehouseSupplies = function(player, args)
     end
     syncRottenProvisionNotice(player, rottenCount)
 
-    Shared.saveAndRefreshProcessed(player, worker, true)
+    Shared.saveAndRefreshSupplyTransfer(player, worker, true)
 end
 
 Network.Handlers.DepositWarehouseOutput = function(player, args)
@@ -168,17 +219,19 @@ Network.Handlers.DepositWarehouseOutput = function(player, args)
 
     local owner = Config.GetOwnerUsername(player)
     local worker = Registry.GetWorkerForOwner(owner, args.workerID)
-    if not worker then return end
-
-    local itemIDs = args.itemIDs or {}
-    if args.itemID then
-        itemIDs[#itemIDs + 1] = args.itemID
+    if not worker then
+        Shared.syncSupplyTransferResult(player, args, { message = "That worker could not be found.", rejected = {} })
+        return
     end
+
+    local reserved, rejected = Shared.beginItemTransferLocks(player, Shared.normalizeItemIDs(args))
+    local acceptedItemIDs = {}
 
     local eligibleCount = 0
     local movedCount = 0
     local blockedCount = 0
-    for _, itemID in ipairs(itemIDs) do
+    for _, lock in ipairs(reserved) do
+        local itemID = lock.itemID
         local invItem = Internal.getInventoryItemByID(player, itemID)
         if invItem then
             local fullType = invItem:getFullType()
@@ -190,9 +243,13 @@ Network.Handlers.DepositWarehouseOutput = function(player, args)
                         if Warehouse.DepositProvisionEntry(owner, provisionEntry) then
                             Internal.removeInventoryItem(invItem)
                             movedCount = movedCount + 1
+                            acceptedItemIDs[#acceptedItemIDs + 1] = itemID
                         else
                             blockedCount = blockedCount + 1
+                            rejectItem(rejected, itemID, "capacity")
                         end
+                    else
+                        rejectItem(rejected, itemID, "not_provision")
                     end
                 else
                     eligibleCount = eligibleCount + 1
@@ -218,13 +275,26 @@ Network.Handlers.DepositWarehouseOutput = function(player, args)
                             end
                         end
                         movedCount = movedCount + movedQty
+                        acceptedItemIDs[#acceptedItemIDs + 1] = itemID
                     else
                         blockedCount = blockedCount + 1
+                        rejectItem(rejected, itemID, "capacity")
                     end
                 end
+            else
+                rejectItem(rejected, itemID, "money")
             end
+        else
+            rejectItem(rejected, itemID, "missing")
         end
     end
+    Shared.releaseItemTransferLocks(reserved)
+    Shared.syncSupplyTransferResult(player, args, {
+        acceptedItemIDs = acceptedItemIDs,
+        rejected = rejected,
+        movedCount = movedCount,
+        message = buildTransferMessage("warehouse storage", movedCount, #rejected),
+    })
 
     if movedCount <= 0 then
         if eligibleCount <= 0 then
@@ -245,7 +315,7 @@ Network.Handlers.DepositWarehouseOutput = function(player, args)
         )
     end
 
-    Shared.saveAndRefreshProcessed(player, worker, true)
+    Shared.saveAndRefreshSupplyTransfer(player, worker, true)
 end
 
 return Network

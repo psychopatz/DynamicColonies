@@ -31,6 +31,124 @@ local function getDepositTargetLabel(window)
     return "NPC inventory"
 end
 
+local function getTransferItemIDs(entries)
+    local itemIDs = {}
+    for _, entry in ipairs(entries or {}) do
+        if entry and entry.itemID then
+            itemIDs[#itemIDs + 1] = entry.itemID
+        end
+    end
+    return itemIDs
+end
+
+function DC_SupplyWindow:hasPendingSupplyTransfers()
+    for _requestID, _pending in pairs(self.pendingSupplyTransfers or {}) do
+        return true
+    end
+    return false
+end
+
+function DC_SupplyWindow:createSupplyTransferRequestID(kind)
+    self.supplyTransferSequence = (tonumber(self.supplyTransferSequence) or 0) + 1
+    return table.concat({
+        tostring(self.workerID or "worker"),
+        tostring(kind or "transfer"),
+        tostring(self.supplyTransferSequence),
+        tostring(getTimestampMs and getTimestampMs() or getTimestamp and getTimestamp() or os.time())
+    }, ":")
+end
+
+function DC_SupplyWindow:markEntriesTransferPending(entries, pending)
+    for _, entry in ipairs(entries or {}) do
+        if entry then
+            entry.transferPending = pending == true
+            entry.pending = pending == true
+        end
+    end
+end
+
+function DC_SupplyWindow:beginSupplyTransfer(kind, command, args, entries)
+    if not command then
+        return nil
+    end
+
+    local requestID = self:createSupplyTransferRequestID(kind)
+    local itemIDs = getTransferItemIDs(entries)
+    args = args or {}
+    args.requestID = requestID
+    args.requestKind = kind
+    args.itemIDs = args.itemIDs or itemIDs
+
+    self.pendingSupplyTransfers = self.pendingSupplyTransfers or {}
+    self.pendingSupplyTransfers[requestID] = {
+        kind = kind,
+        command = command,
+        itemIDs = itemIDs,
+        entries = entries or {},
+    }
+    self:markEntriesTransferPending(entries, true)
+    self:rebuildPlayerList()
+    self:updateTransferControls()
+
+    if not self:sendColonyCommand(command, args) then
+        self.pendingSupplyTransfers[requestID] = nil
+        self:markEntriesTransferPending(entries, false)
+        self:rebuildPlayerList()
+        self:updateTransferControls()
+        return nil
+    end
+
+    return requestID
+end
+
+function DC_SupplyWindow:onSupplyTransferResult(args)
+    args = args or {}
+    local requestID = tostring(args.requestID or "")
+    local pending = requestID ~= "" and self.pendingSupplyTransfers and self.pendingSupplyTransfers[requestID] or nil
+    local acceptedMap = {}
+    local acceptedCount = 0
+    local rejectedCount = 0
+
+    for _, itemID in ipairs(args.acceptedItemIDs or {}) do
+        acceptedMap[itemID] = true
+        acceptedMap[tostring(itemID)] = true
+        acceptedCount = acceptedCount + 1
+        self:removePlayerEntryByID(itemID)
+    end
+
+    for _index, _entry in ipairs(args.rejected or {}) do
+        rejectedCount = rejectedCount + 1
+    end
+
+    if pending then
+        for _, entry in ipairs(pending.entries or {}) do
+            if entry and not (acceptedMap[entry.itemID] or acceptedMap[tostring(entry.itemID or "")]) then
+                entry.transferPending = false
+                entry.pending = false
+            end
+        end
+        self.pendingSupplyTransfers[requestID] = nil
+    end
+
+    self:rebuildPlayerList()
+    self:updateTransferControls()
+
+    local status = tostring(args.message or "")
+    if status == "" then
+        if acceptedCount > 0 and rejectedCount > 0 then
+            status = "Stored " .. tostring(acceptedCount) .. " item" .. (acceptedCount == 1 and "" or "s")
+                .. "; " .. tostring(rejectedCount) .. " failed."
+        elseif acceptedCount > 0 then
+            status = "Stored " .. tostring(acceptedCount) .. " item" .. (acceptedCount == 1 and "" or "s") .. "."
+        elseif rejectedCount > 0 then
+            status = tostring(rejectedCount) .. " item" .. (rejectedCount == 1 and "" or "s") .. " could not be stored."
+        end
+    end
+    if status ~= "" then
+        self:updateStatus(status)
+    end
+end
+
 local function getSelectedEquipmentRequirementKey(window)
     local workerEntry = window and window.selectedWorkerEntry or nil
     if Internal.isGroupEntry and Internal.isGroupEntry(workerEntry) then
@@ -188,15 +306,13 @@ function DC_SupplyWindow:depositEntries(entries)
     end
 
     local command = activeTab == Internal.Tabs.Output and getOutputDepositCommand(self) or getSupplyDepositCommand(self)
-    if not command or not self:sendColonyCommand(command, {
+    if not command or not self:beginSupplyTransfer("deposit", command, {
             workerID = self.workerID,
             itemIDs = payload
-        }) then
+        }, fittingEntries) then
         self:updateStatus("Unable to send transfer to " .. getDepositTargetLabel(self) .. ".")
         return
     end
-
-    self:applyOptimisticDeposit(fittingEntries)
 
     if #fittingEntries == 1 then
         local entry = fittingEntries[1]
@@ -263,24 +379,19 @@ function DC_SupplyWindow:assignToolEntries(entries)
     end
 
     local requirementKey = getSelectedEquipmentRequirementKey(self)
-    local sentEntries = {}
-    for _, entry in ipairs(fittingEntries) do
-        if self:sendColonyCommand(getEquipmentDepositCommand(self), {
-                workerID = self.workerID,
-                itemID = entry.itemID,
-                requirementKey = requirementKey,
-            }) then
-            entry.assignedRequirementKey = requirementKey
-            sentEntries[#sentEntries + 1] = entry
-        end
+    local sentEntries = fittingEntries
+    for _, entry in ipairs(sentEntries) do
+        entry.assignedRequirementKey = requirementKey
     end
 
-    if #sentEntries <= 0 then
+    if not self:beginSupplyTransfer("equipment", getEquipmentDepositCommand(self), {
+            workerID = self.workerID,
+            itemIDs = getTransferItemIDs(sentEntries),
+            requirementKey = requirementKey,
+        }, sentEntries) then
         self:updateStatus("Unable to send equipment assignment to " .. getDepositTargetLabel(self) .. ".")
         return
     end
-
-    self:applyOptimisticToolAssign(sentEntries)
 
     if #sentEntries == 1 then
         local statusText =

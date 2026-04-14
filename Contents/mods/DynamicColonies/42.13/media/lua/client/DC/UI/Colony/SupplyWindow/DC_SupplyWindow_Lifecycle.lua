@@ -54,9 +54,6 @@ function DC_SupplyWindow.Open(worker, viewMode)
     window:setWorkerData(workerDetail or worker)
     window:startInventoryScan()
     window:requestWorkerDetails()
-    if DC_EquipmentPickerModal and DC_EquipmentPickerModal.Preload then
-        DC_EquipmentPickerModal.Preload()
-    end
     window:updateStatus(
         (window.viewMode == ((DC_SupplyWindow.Internal.ViewModes or {}).Warehouse) and "Opening warehouse for " or "Opening inventory for ")
             .. subjectName .. "."
@@ -99,5 +96,7 @@ function DC_SupplyWindow:new(x, y, width, height)
     o.pendingWorkerListNextIndex = nil
     o.pendingWorkerListSelectedKey = nil
     o.pendingWorkerListSelectedRowIndex = nil
+    o.pendingSupplyTransfers = {}
+    o.supplyTransferSequence = 0
     return o
 end

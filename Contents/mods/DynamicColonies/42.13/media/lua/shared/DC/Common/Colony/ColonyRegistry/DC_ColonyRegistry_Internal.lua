@@ -31,6 +31,16 @@ function Internal.CopyDeep(source)
     return copy
 end
 
+function Internal.GenerateLedgerEntryID(prefix)
+    local randomPart = ZombRand and ZombRand(1000000000) or math.random(1, 1000000000)
+    local timePart = (Config.GetCurrentWorldHours and Config.GetCurrentWorldHours()) or Config.GetCurrentHour and Config.GetCurrentHour() or os.time()
+    return table.concat({
+        tostring(prefix or "ledger"),
+        tostring(math.floor((tonumber(timePart) or 0) * 1000)),
+        tostring(randomPart)
+    }, "-")
+end
+
 function Internal.GetDisplayNameForFullType(fullType)
     if not fullType or not getScriptManager then
         return tostring(fullType or "Unknown Item")
@@ -248,6 +258,36 @@ function Internal.CreateTransientInventoryItem(fullType)
     return nil
 end
 
+function Internal.GetEquipmentStaticMetadata(fullType)
+    local key = tostring(fullType or "")
+    if key == "" then
+        return nil
+    end
+
+    Internal.EquipmentStaticMetadataCache = Internal.EquipmentStaticMetadataCache or {}
+    if Internal.EquipmentStaticMetadataCache[key] then
+        return Internal.EquipmentStaticMetadataCache[key]
+    end
+
+    local tempItem = Internal.CreateTransientInventoryItem(key)
+    local scriptItem = tempItem and tempItem.getScriptItem and tempItem:getScriptItem() or (getScriptManager and getScriptManager():getItem(key)) or nil
+    local metadata = {
+        scriptItem = scriptItem,
+        tags = copyStringArray((Config.GetItemCombinedTags and Config.GetItemCombinedTags(key)) or {}),
+        conditionMax = tempItem and tempItem.getConditionMax and tempItem:getConditionMax() or (scriptItem and scriptItem.getConditionMax and scriptItem:getConditionMax()) or 0,
+        isDrainable = tempItem and tempItem.IsDrainable and tempItem:IsDrainable() or false,
+        useDelta = tempItem and tempItem.getUseDelta and tempItem:getUseDelta() or (scriptItem and scriptItem.getUseDelta and scriptItem:getUseDelta()) or 0,
+        keepOnDeplete = resolveKeepOnDeplete(tempItem, scriptItem),
+        hasHeadCondition = tempItem and tempItem.hasHeadCondition and tempItem:hasHeadCondition() or false,
+        headConditionMax = tempItem and tempItem.hasHeadCondition and tempItem:hasHeadCondition() and tempItem.getHeadConditionMax and tempItem:getHeadConditionMax() or 0,
+        quality = tempItem and tempItem.getQuality and tempItem:getQuality() or nil,
+        haveBeenRepaired = tempItem and tempItem.getHaveBeenRepaired and tempItem:getHaveBeenRepaired() or nil,
+    }
+
+    Internal.EquipmentStaticMetadataCache[key] = metadata
+    return metadata
+end
+
 function Internal.ApplyEquipmentEntryState(item, entry)
     if not item or type(entry) ~= "table" then
         return item
@@ -298,19 +338,16 @@ function Internal.NormalizeEquipmentEntry(entry)
         return nil
     end
 
-    local tempItem = Internal.CreateTransientInventoryItem(fullType)
-    local scriptItem = tempItem and tempItem.getScriptItem and tempItem:getScriptItem() or (getScriptManager and getScriptManager():getItem(fullType)) or nil
+    local staticMetadata = Internal.GetEquipmentStaticMetadata(fullType) or {}
     local defaultTags = entry.tags
-        or (Config.GetItemCombinedTags and Config.GetItemCombinedTags(fullType))
+        or staticMetadata.tags
         or {}
-    local conditionMax = tempItem and tempItem.getConditionMax and tempItem:getConditionMax() or (scriptItem and scriptItem.getConditionMax and scriptItem:getConditionMax()) or 0
-    local isDrainable = tempItem and tempItem.IsDrainable and tempItem:IsDrainable() or false
-    local useDelta = tempItem and tempItem.getUseDelta and tempItem:getUseDelta() or (scriptItem and scriptItem.getUseDelta and scriptItem:getUseDelta()) or 0
+    local conditionMax = tonumber(staticMetadata.conditionMax) or 0
+    local isDrainable = staticMetadata.isDrainable == true
+    local useDelta = tonumber(staticMetadata.useDelta) or 0
     local usedDelta = tonumber(entry.usedDelta)
     if usedDelta == nil and isDrainable then
-        usedDelta = tempItem and tempItem.getCurrentUsesFloat and tempItem:getCurrentUsesFloat()
-            or tempItem and tempItem.getUsedDelta and tempItem:getUsedDelta()
-            or 1
+        usedDelta = 1
     end
 
     local condition = tonumber(entry.condition)
@@ -318,21 +355,21 @@ function Internal.NormalizeEquipmentEntry(entry)
         condition = conditionMax
     end
 
-    local hasHeadCondition = tempItem and tempItem.hasHeadCondition and tempItem:hasHeadCondition() or false
-    local headConditionMax = hasHeadCondition and tempItem.getHeadConditionMax and tempItem:getHeadConditionMax() or 0
+    local hasHeadCondition = staticMetadata.hasHeadCondition == true
+    local headConditionMax = tonumber(staticMetadata.headConditionMax) or 0
     local headCondition = tonumber(entry.headCondition)
-    if headCondition == nil and hasHeadCondition and tempItem and tempItem.getHeadCondition then
-        headCondition = tempItem:getHeadCondition()
+    if headCondition == nil and hasHeadCondition then
+        headCondition = headConditionMax
     end
 
     local quality = tonumber(entry.quality)
-    if quality == nil and tempItem and tempItem.getQuality then
-        quality = tempItem:getQuality()
+    if quality == nil then
+        quality = staticMetadata.quality
     end
 
     local haveBeenRepaired = tonumber(entry.haveBeenRepaired)
-    if haveBeenRepaired == nil and tempItem and tempItem.getHaveBeenRepaired then
-        haveBeenRepaired = tempItem:getHaveBeenRepaired()
+    if haveBeenRepaired == nil then
+        haveBeenRepaired = staticMetadata.haveBeenRepaired
     end
 
     local assignedRequirementKey = tostring(entry.assignedRequirementKey or "")
@@ -342,6 +379,7 @@ function Internal.NormalizeEquipmentEntry(entry)
 
     return {
         fullType = fullType,
+        entryID = tostring(entry.entryID or Internal.GenerateLedgerEntryID("eq")),
         displayName = tostring(entry.displayName or Internal.GetDisplayNameForFullType(fullType)),
         tags = copyStringArray(defaultTags),
         qty = 1,
@@ -354,7 +392,7 @@ function Internal.NormalizeEquipmentEntry(entry)
         usedDelta = isDrainable and math.max(0, math.min(1, tonumber(usedDelta) or 0)) or nil,
         quality = quality ~= nil and math.max(0, math.floor(tonumber(quality) or 0)) or nil,
         haveBeenRepaired = haveBeenRepaired ~= nil and math.max(0, math.floor(tonumber(haveBeenRepaired) or 0)) or nil,
-        keepOnDeplete = resolveKeepOnDeplete(tempItem, scriptItem),
+        keepOnDeplete = staticMetadata.keepOnDeplete == true,
         pendingVanillaBreak = entry.pendingVanillaBreak == true,
         assignedRequirementKey = assignedRequirementKey,
     }
@@ -419,6 +457,7 @@ function Internal.NormalizeOutputEntry(entry)
 
     local normalized = {
         fullType = fullType,
+        entryID = tostring(entry.entryID or Internal.GenerateLedgerEntryID("out")),
         displayName = tostring(entry.displayName or Internal.GetDisplayNameForFullType(fullType)),
         qty = math.max(1, math.floor(tonumber(entry.qty) or 1)),
     }
@@ -571,6 +610,51 @@ function Internal.IsEquipmentEntryUsable(entry)
     end
 
     return true
+end
+
+function Internal.BuildToolLedgerFromLoadout(loadout)
+    if type(loadout) ~= "table" then
+        return {}
+    end
+
+    local ledger = {}
+    local function append(fullType, requirementKey, condition)
+        local itemType = tostring(fullType or "")
+        if itemType == "" then
+            return
+        end
+        local entry = Internal.NormalizeEquipmentEntry({
+            fullType = itemType,
+            displayName = Internal.GetDisplayNameForFullType(itemType),
+            tags = (Config.GetItemCombinedTags and Config.GetItemCombinedTags(itemType)) or {},
+            condition = condition,
+            assignedRequirementKey = requirementKey,
+        })
+        if entry then
+            ledger[#ledger + 1] = entry
+        end
+    end
+
+    append(loadout.meleeWeapon or loadout.primaryMeleeWeapon or loadout.weapon, "Colony.Combat.Melee", loadout.meleeCondition)
+    append(loadout.rangedWeapon or loadout.firearm or loadout.gun, "Colony.Combat.Ranged", loadout.rangedCondition)
+    append(loadout.rangedAmmoType or loadout.ammoType or loadout.ammo, "Colony.Combat.Ammo")
+
+    return ledger
+end
+
+function Internal.NormalizeSourceLoadout(loadout)
+    if type(loadout) ~= "table" then
+        return {}
+    end
+
+    return {
+        meleeWeapon = loadout.meleeWeapon or loadout.primaryMeleeWeapon or loadout.weapon,
+        meleeCondition = loadout.meleeCondition,
+        rangedWeapon = loadout.rangedWeapon or loadout.firearm or loadout.gun,
+        rangedCondition = loadout.rangedCondition,
+        rangedAmmoType = loadout.rangedAmmoType or loadout.ammoType or loadout.ammo,
+        ammoCount = loadout.ammoCount,
+    }
 end
 
 return Internal

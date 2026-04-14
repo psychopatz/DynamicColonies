@@ -94,6 +94,7 @@ local function normalizeProvisionEntry(entry)
 
     local normalized = {
         fullType = tostring(entry.fullType),
+        entryID = tostring(entry.entryID or Registry.Internal.GenerateLedgerEntryID and Registry.Internal.GenerateLedgerEntryID("prov") or ""),
         displayName = entry.displayName or Registry.Internal.GetDisplayNameForFullType(entry.fullType),
         provisionType = Config.IsMedicalProvisionEntry and Config.IsMedicalProvisionEntry(entry) and "medical" or tostring(entry.provisionType or "nutrition"),
         caloriesRemaining = math.max(0, tonumber(entry.caloriesRemaining) or 0),

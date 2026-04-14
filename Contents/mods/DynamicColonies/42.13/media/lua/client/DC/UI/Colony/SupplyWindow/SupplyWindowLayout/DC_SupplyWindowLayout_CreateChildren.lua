@@ -25,7 +25,7 @@ function DetailSupportIconPanel:render()
     local maxX = self.width - size
 
     for _, entry in ipairs(entries) do
-        local tex = entry and entry.texture or nil
+        local tex = entry and (entry.texture or (Internal.resolveEntryTexture and Internal.resolveEntryTexture(entry) or nil)) or nil
         if x > maxX then
             break
         end

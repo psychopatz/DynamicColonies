@@ -138,10 +138,14 @@ function DC_SupplyWindow:update()
     end
 
     self:processPendingListBuilds(Internal.LIST_BUILD_BATCH_SIZE)
+    if Internal.processTextureQueue then
+        Internal.processTextureQueue(Internal.ICON_RESOLVE_BATCH_SIZE)
+    end
 
     if self.workerID
         and (self.detailRefreshTicks % 180) == 0
         and not self.scanning
+        and not self:hasPendingSupplyTransfers()
         and self.requestWorkerDetails then
         self.autoRefreshPending = true
         self:requestWorkerDetails()

@@ -25,13 +25,13 @@ function DC_SupplyWindow:assignEquipmentPickerCandidate(candidate, requirementKe
         if not self:sendColonyCommand("AssignWarehouseToolToWorker", {
                 workerID = self.workerID,
                 ledgerIndex = candidate.ledgerIndex,
+                entryID = candidate.entryID,
                 requirementKey = requirementKey
             }) then
             self:updateStatus("Unable to move that warehouse item into " .. tostring(self.workerName or "this worker") .. ".")
             return
         end
 
-        self:applyOptimisticWarehouseToolAssign(candidate)
         self:updateStatus("Equipping " .. tostring(candidate.displayName or candidate.fullType or label) .. " from warehouse storage...")
         return
     end
@@ -42,17 +42,16 @@ function DC_SupplyWindow:assignEquipmentPickerCandidate(candidate, requirementKe
         return
     end
 
-    if not self:sendColonyCommand("AssignWorkerToolset", {
+    sourceEntry.assignedRequirementKey = requirementKey
+    if not self:beginSupplyTransfer("equipment", "AssignWorkerToolset", {
             workerID = self.workerID,
-            itemID = sourceEntry.itemID,
+            itemIDs = { sourceEntry.itemID },
             requirementKey = requirementKey
-        }) then
+        }, { sourceEntry }) then
         self:updateStatus("Unable to equip that player item right now.")
         return
     end
 
-    sourceEntry.assignedRequirementKey = requirementKey
-    self:applyOptimisticToolAssign({ sourceEntry })
     self:updateStatus("Equipping " .. tostring(sourceEntry.displayName or sourceEntry.fullType or label) .. " from player inventory...")
 end
 

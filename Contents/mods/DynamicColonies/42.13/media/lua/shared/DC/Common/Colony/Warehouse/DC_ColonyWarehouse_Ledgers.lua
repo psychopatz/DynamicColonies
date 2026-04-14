@@ -34,6 +34,7 @@ local function appendProvisionEntry(warehouse, entry)
 
     local normalized = {
         fullType = entry.fullType,
+        entryID = tostring(entry.entryID or Registry.Internal.GenerateLedgerEntryID and Registry.Internal.GenerateLedgerEntryID("prov") or ""),
         displayName = entry.displayName or Registry.Internal.GetDisplayNameForFullType(entry.fullType),
         provisionType = Config.IsMedicalProvisionEntry and Config.IsMedicalProvisionEntry(entry) and "medical" or "nutrition",
         caloriesRemaining = math.max(0, tonumber(entry.caloriesRemaining) or 0),

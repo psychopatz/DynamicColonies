@@ -41,7 +41,7 @@ local function buildSupportEntriesFromFullTypes(fullTypes)
             entries[#entries + 1] = {
                 fullType = key,
                 displayName = Internal.getDisplayNameForFullType(key),
-                texture = Internal.getTextureForFullType(key),
+                texture = Internal.queueTextureForFullType(key),
             }
         end
     end
@@ -68,7 +68,7 @@ function Internal.getPlaceholderSupportDisplay(window, entry)
                 matches[#matches + 1] = {
                     fullType = playerEntry.fullType,
                     displayName = playerEntry.displayName,
-                    texture = playerEntry.texture or Internal.getTextureForFullType(playerEntry.fullType),
+                    texture = playerEntry.texture or (Internal.queueTextureForFullType and Internal.queueTextureForFullType(playerEntry.fullType) or nil),
                 }
             end
         end
@@ -361,6 +361,14 @@ function Internal.getWorkerTabSummary(window, entries)
 end
 
 function Internal.getPlayerEntryPresentation(entry, activeTab, worker, window)
+    if entry and entry.transferPending == true then
+        return {
+            statText = appendWeightText("Waiting for server confirmation", entry),
+            badgeText = "Pending",
+            dimmed = true,
+        }
+    end
+
     if Internal.isGroupEntry and Internal.isGroupEntry(entry) then
         if activeTab == Internal.Tabs.Equipment then
             local durabilityText = getDurabilityText(entry)

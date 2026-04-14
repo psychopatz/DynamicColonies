@@ -113,7 +113,7 @@ function Internal.getCachedInventoryEntryStaticData(fullType)
         treatmentUnits = isMedicalProvision and (Internal.Config.GetMedicalProvisionUnits and Internal.Config.GetMedicalProvisionUnits(key) or 0) or 0,
         provisionType = isMedicalProvision and "medical" or "nutrition",
         unitWeight = getUnitWeight(key),
-        texture = Internal.getTextureForFullType and Internal.getTextureForFullType(key) or nil,
+        texture = Internal.peekTextureForFullType and Internal.peekTextureForFullType(key) or nil,
         isMedicalProvision = isMedicalProvision,
     }
 
@@ -281,7 +281,7 @@ function Internal.buildPlayerMoneyEntry(player)
         fullType = "Base.Money",
         amount = wealth,
         canDeposit = wealth > 0,
-        texture = Internal.getTextureForFullType("Base.MoneyBundle") or Internal.getTextureForFullType("Base.Money"),
+        texture = Internal.queueTextureForFullType("Base.MoneyBundle") or Internal.queueTextureForFullType("Base.Money"),
     }
 end
 
@@ -312,7 +312,8 @@ function Internal.buildWorkerSupplyEntry(entry, index)
         qty = qty,
         unitWeight = getUnitWeight(entry.fullType),
         totalWeight = getTotalWeight(entry.fullType, qty),
-        texture = entry.texture or Internal.getTextureForFullType(entry.fullType),
+        texture = entry.texture or (Internal.peekTextureForFullType and Internal.peekTextureForFullType(entry.fullType) or nil),
+        entryID = entry.entryID,
         pending = entry.pending == true,
     }
 end
@@ -324,7 +325,7 @@ function Internal.buildWorkerMoneyEntry(worker)
         displayName = "Stored Cash",
         fullType = "Base.Money",
         amount = math.max(0, math.floor(tonumber(worker and worker.moneyStored) or 0)),
-        texture = Internal.getTextureForFullType("Base.MoneyBundle") or Internal.getTextureForFullType("Base.Money"),
+        texture = Internal.queueTextureForFullType("Base.MoneyBundle") or Internal.queueTextureForFullType("Base.Money"),
     }
 end
 
@@ -344,10 +345,11 @@ function Internal.buildWorkerToolEntry(entry, index)
         qty = math.max(1, tonumber(normalizedEntry.qty) or 1),
         unitWeight = getUnitWeight(normalizedEntry.fullType),
         totalWeight = getTotalWeight(normalizedEntry.fullType, normalizedEntry.qty),
-        texture = entry.texture or normalizedEntry.texture or Internal.getTextureForFullType(normalizedEntry.fullType),
+        texture = entry.texture or normalizedEntry.texture or (Internal.peekTextureForFullType and Internal.peekTextureForFullType(normalizedEntry.fullType) or nil),
         pending = entry.pending == true,
         isUsableEquipment = isUsableEquipmentEntry(normalizedEntry),
         assignedRequirementKey = normalizedEntry.assignedRequirementKey,
+        entryID = normalizedEntry.entryID or entry.entryID,
     }
     return copyEquipmentState(toolEntry, normalizedEntry)
 end
@@ -369,7 +371,8 @@ function Internal.buildWorkerToolPlaceholderEntry(definition)
         requirementKey = definition.requirementKey,
         requirementTags = definition.requirementTags or {},
         supportedFullTypes = definition.supportedFullTypes or {},
-        texture = definition.texture or Internal.getTextureForFullType(definition.iconFullType),
+        texture = definition.texture or (Internal.peekTextureForFullType and Internal.peekTextureForFullType(definition.iconFullType) or nil),
+        iconFullType = definition.iconFullType,
     }
 end
 
@@ -387,8 +390,9 @@ function Internal.buildWorkerOutputEntry(entry, index)
         qty = math.max(1, tonumber(normalizedEntry.qty) or 1),
         unitWeight = getUnitWeight(normalizedEntry.fullType),
         totalWeight = getTotalWeight(normalizedEntry.fullType, normalizedEntry.qty),
-        texture = entry.texture or normalizedEntry.texture or Internal.getTextureForFullType(normalizedEntry.fullType),
+        texture = entry.texture or normalizedEntry.texture or (Internal.peekTextureForFullType and Internal.peekTextureForFullType(normalizedEntry.fullType) or nil),
         pending = entry.pending == true,
+        entryID = normalizedEntry.entryID or entry.entryID,
     }, normalizedEntry)
     return copyEquipmentState(outputEntry, normalizedEntry)
 end

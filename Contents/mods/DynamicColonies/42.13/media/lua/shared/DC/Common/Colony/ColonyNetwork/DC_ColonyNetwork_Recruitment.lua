@@ -229,7 +229,9 @@ local function createWorkerFromRecruitArgs(owner, args, sourceSoul)
         hp = hp,
         maxHp = maxHp,
         sourceNPCID = resolvedSourceNPCID and tostring(resolvedSourceNPCID) or nil,
-        sourceNPCType = args.sourceNPCType or "ConversationUI"
+        sourceNPCType = args.sourceNPCType or "ConversationUI",
+        sourceLoadout = args.loadout or (sourceSoul and (sourceSoul.loadout or sourceSoul)),
+        loadout = args.loadout or (sourceSoul and (sourceSoul.loadout or sourceSoul)),
     })
 
     if args.x and args.y then
