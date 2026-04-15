@@ -549,7 +549,7 @@ function Internal.BuildOutputAddItemCustomData(entry)
         customData.fluidAmount = normalized.fluidAmount
     end
 
-    if next(customData) ~= nil then
+    for _ in pairs(customData) do
         return customData
     end
 

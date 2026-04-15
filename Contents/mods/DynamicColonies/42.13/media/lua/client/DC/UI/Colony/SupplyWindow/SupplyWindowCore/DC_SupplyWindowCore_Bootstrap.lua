@@ -5,10 +5,10 @@ local Internal = DC_SupplyWindow.Internal
 
 Internal.Config = DC_Colony and DC_Colony.Config or Internal.Config or {}
 Internal.Nutrition = DC_Colony and DC_Colony.Nutrition or Internal.Nutrition or {}
-Internal.ENTRY_SCAN_BATCH_SIZE = 48
-Internal.RAW_SCAN_STEP_LIMIT = 900
-Internal.LIST_BUILD_BATCH_SIZE = 64
-Internal.ICON_RESOLVE_BATCH_SIZE = 6
+Internal.ENTRY_SCAN_BATCH_SIZE = 16
+Internal.RAW_SCAN_STEP_LIMIT = 240
+Internal.LIST_BUILD_BATCH_SIZE = 32
+Internal.ICON_RESOLVE_BATCH_SIZE = 2
 Internal.NutritionPreviewCache = Internal.NutritionPreviewCache or {}
 Internal.InventoryEntryStaticCache = Internal.InventoryEntryStaticCache or {}
 Internal.TextureCache = Internal.TextureCache or {}
