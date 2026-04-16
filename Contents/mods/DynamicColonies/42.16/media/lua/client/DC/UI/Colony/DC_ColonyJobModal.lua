@@ -76,10 +76,32 @@ local function buildOrderedJobOptions(config, worker)
         local label = tostring(profile.displayName or normalized)
 
         local color = nil
-        local skillID = config.GetWorkerJobSkillID and config.GetWorkerJobSkillID(worker, {jobType = normalized}) or nil
-        if skillID and DC_Colony.Skills then
+        local tempWorker = worker and {scavengeSiteProfileID = worker.scavengeSiteProfileID, jobType = normalized} or {jobType = normalized}
+        local skillID = config.GetWorkerJobSkillID and config.GetWorkerJobSkillID(tempWorker, {jobType = normalized}) or nil
+        
+        if normalized == tostring((jobTypes.TravelCompanion or "TravelCompanion")) then
+            local meleeLevel = 0
+            local shootingLevel = 0
+            if DC_Colony.Skills then
+                local meleeEntry = DC_Colony.Skills.GetSkillEntry(worker, "Melee")
+                meleeLevel = math.max(0, math.floor(tonumber(meleeEntry and meleeEntry.level) or 0))
+                local shootingEntry = DC_Colony.Skills.GetSkillEntry(worker, "Shooting")
+                shootingLevel = math.max(0, math.floor(tonumber(shootingEntry and shootingEntry.level) or 0))
+            end
+            local highestLevel = math.max(meleeLevel, shootingLevel)
+            color = getSkillColor(highestLevel)
+            local texts = {}
+            if shootingLevel > 0 then table.insert(texts, "Shooting " .. tostring(shootingLevel)) end
+            if meleeLevel > 0 then table.insert(texts, "Melee " .. tostring(meleeLevel)) end
+            if #texts > 0 then
+                label = label .. " - " .. table.concat(texts, " / ")
+            else
+                label = label .. " - Lvl 0 Combat"
+            end
+        elseif skillID and DC_Colony.Skills then
             local entry = DC_Colony.Skills.GetSkillEntry(worker, skillID)
-            local level = entry and entry.level or 0
+            local level = math.max(0, math.floor(tonumber(entry and entry.level) or 0))
+            if level <= 0 then level = 0 end
             local skillLabel = config.GetSkillDisplayName and config.GetSkillDisplayName(skillID) or skillID
             label = label .. " - Lvl " .. tostring(level) .. " " .. skillLabel
             color = getSkillColor(level)
@@ -113,10 +135,32 @@ local function buildOrderedJobOptions(config, worker)
             local label = tostring(profile and profile.displayName or normalized)
             
             local color = nil
-            local skillID = config.GetWorkerJobSkillID and config.GetWorkerJobSkillID(worker, {jobType = normalized}) or nil
-            if skillID and DC_Colony.Skills then
+            local tempWorker = worker and {scavengeSiteProfileID = worker.scavengeSiteProfileID, jobType = normalized} or {jobType = normalized}
+            local skillID = config.GetWorkerJobSkillID and config.GetWorkerJobSkillID(tempWorker, {jobType = normalized}) or nil
+            
+            if normalized == tostring((jobTypes.TravelCompanion or "TravelCompanion")) then
+                local meleeLevel = 0
+                local shootingLevel = 0
+                if DC_Colony.Skills then
+                    local meleeEntry = DC_Colony.Skills.GetSkillEntry(worker, "Melee")
+                    meleeLevel = math.max(0, math.floor(tonumber(meleeEntry and meleeEntry.level) or 0))
+                    local shootingEntry = DC_Colony.Skills.GetSkillEntry(worker, "Shooting")
+                    shootingLevel = math.max(0, math.floor(tonumber(shootingEntry and shootingEntry.level) or 0))
+                end
+                local highestLevel = math.max(meleeLevel, shootingLevel)
+                color = getSkillColor(highestLevel)
+                local texts = {}
+                if shootingLevel > 0 then table.insert(texts, "Shooting " .. tostring(shootingLevel)) end
+                if meleeLevel > 0 then table.insert(texts, "Melee " .. tostring(meleeLevel)) end
+                if #texts > 0 then
+                    label = label .. " - " .. table.concat(texts, " / ")
+                else
+                    label = label .. " - Lvl 0 Combat"
+                end
+            elseif skillID and DC_Colony.Skills then
                 local entry = DC_Colony.Skills.GetSkillEntry(worker, skillID)
-                local level = entry and entry.level or 0
+                local level = math.max(0, math.floor(tonumber(entry and entry.level) or 0))
+                if level <= 0 then level = 0 end
                 local skillLabel = config.GetSkillDisplayName and config.GetSkillDisplayName(skillID) or skillID
                 label = label .. " - Lvl " .. tostring(level) .. " " .. skillLabel
                 color = getSkillColor(level)

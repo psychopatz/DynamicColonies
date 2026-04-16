@@ -52,14 +52,7 @@ function Config.GetWorkerJobCapability(worker, jobType)
         skillLevel = 0,
     }
 
-    if normalizedJobType == ((Config.JobTypes or {}).Builder) then
-        capability.skillID = "Construction"
-        capability.skillLevel = getWorkerSkillLevel(worker, capability.skillID)
-        capability.capable = capability.skillLevel > 0
-        if not capability.capable then
-            capability.reason = "That worker has no Construction skill and cannot be assigned to Builder."
-        end
-    elseif normalizedJobType == ((Config.JobTypes or {}).TravelCompanion) then
+    if normalizedJobType == ((Config.JobTypes or {}).TravelCompanion) then
         local companion = DC_Colony and DC_Colony.Companion or nil
         capability.skillID = "Combat"
         capability.skillLevel = math.max(
@@ -68,21 +61,27 @@ function Config.GetWorkerJobCapability(worker, jobType)
         )
         if Config.IsTravelCompanionSupported and not Config.IsTravelCompanionSupported() then
             capability.capable = false
-            capability.reason = "Travel Companion requires Dynamic Trading V2."
+            capability.reason = "Travel Companion requires V2."
             return capability
         end
         if companion and companion.CanWorkerBeCompanion then
             capability.capable, capability.reason = companion.CanWorkerBeCompanion(worker)
         else
             capability.capable = false
-            capability.reason = "Travel Companion is unavailable."
+            capability.reason = "Companion unavailable."
         end
-    elseif normalizedJobType == ((Config.JobTypes or {}).Fish) then
-        capability.skillID = "Animals"
-        capability.skillLevel = getWorkerSkillLevel(worker, capability.skillID)
+        return capability
+    end
+
+    local tempWorker = worker and {scavengeSiteProfileID = worker.scavengeSiteProfileID, jobType = normalizedJobType} or {jobType = normalizedJobType}
+    local skillID = Config.GetWorkerJobSkillID and Config.GetWorkerJobSkillID(tempWorker, {jobType = normalizedJobType}) or nil
+    if skillID then
+        capability.skillID = skillID
+        capability.skillLevel = getWorkerSkillLevel(worker, skillID)
         capability.capable = capability.skillLevel > 0
         if not capability.capable then
-            capability.reason = "That worker has no Animals skill and cannot be assigned to Fishing."
+            local skillLabel = Config.GetSkillDisplayName and Config.GetSkillDisplayName(skillID) or skillID
+            capability.reason = "Requires " .. skillLabel .. " skill."
         end
     end
 
