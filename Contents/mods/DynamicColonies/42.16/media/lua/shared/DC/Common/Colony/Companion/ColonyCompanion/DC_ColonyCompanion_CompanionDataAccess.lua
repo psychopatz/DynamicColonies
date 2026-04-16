@@ -55,9 +55,23 @@ function Internal.NormalizeCompanionLootConfig(config)
         profileID = nil
     end
 
+    local includeWorldContainers = source.includeWorldContainers ~= false
+    local includeLooseWorldItems = source.includeLooseWorldItems ~= nil
+        and source.includeLooseWorldItems ~= false
+        or (source.includeLooseWorldItems == nil and includeWorldContainers)
+    local includeGroundContainers = source.includeGroundContainers ~= nil
+        and source.includeGroundContainers ~= false
+        or (source.includeGroundContainers == nil and includeWorldContainers)
+    local includeFurnitureContainers = source.includeFurnitureContainers ~= nil
+        and source.includeFurnitureContainers ~= false
+        or (source.includeFurnitureContainers == nil and includeWorldContainers)
+
     return {
         radius = clampRadius(source.radius),
-        includeWorldContainers = source.includeWorldContainers ~= false,
+        includeWorldContainers = includeWorldContainers,
+        includeLooseWorldItems = includeLooseWorldItems,
+        includeGroundContainers = includeGroundContainers,
+        includeFurnitureContainers = includeFurnitureContainers,
         includeCorpseContainers = source.includeCorpseContainers ~= false,
         includeVehicleContainers = source.includeVehicleContainers ~= false,
         profileID = profileID,
@@ -70,6 +84,9 @@ function Internal.CloneCompanionLootConfig(config)
     return {
         radius = normalized.radius,
         includeWorldContainers = normalized.includeWorldContainers,
+        includeLooseWorldItems = normalized.includeLooseWorldItems,
+        includeGroundContainers = normalized.includeGroundContainers,
+        includeFurnitureContainers = normalized.includeFurnitureContainers,
         includeCorpseContainers = normalized.includeCorpseContainers,
         includeVehicleContainers = normalized.includeVehicleContainers,
         profileID = normalized.profileID,

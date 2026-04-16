@@ -61,6 +61,9 @@ local function buildDefaultConfig()
     return {
         radius = DEFAULT_RADIUS,
         includeWorldContainers = true,
+        includeLooseWorldItems = true,
+        includeGroundContainers = true,
+        includeFurnitureContainers = true,
         includeCorpseContainers = true,
         includeVehicleContainers = true,
         profileID = nil,
@@ -75,9 +78,19 @@ local function cloneLootConfig(config)
     end
 
     local source = type(config) == "table" and config or buildDefaultConfig()
+    local includeWorldContainers = source.includeWorldContainers ~= false
     return {
         radius = clampRadius(source.radius),
-        includeWorldContainers = source.includeWorldContainers ~= false,
+        includeWorldContainers = includeWorldContainers,
+        includeLooseWorldItems = source.includeLooseWorldItems ~= nil
+            and source.includeLooseWorldItems ~= false
+            or (source.includeLooseWorldItems == nil and includeWorldContainers),
+        includeGroundContainers = source.includeGroundContainers ~= nil
+            and source.includeGroundContainers ~= false
+            or (source.includeGroundContainers == nil and includeWorldContainers),
+        includeFurnitureContainers = source.includeFurnitureContainers ~= nil
+            and source.includeFurnitureContainers ~= false
+            or (source.includeFurnitureContainers == nil and includeWorldContainers),
         includeCorpseContainers = source.includeCorpseContainers ~= false,
         includeVehicleContainers = source.includeVehicleContainers ~= false,
         profileID = trim(source.profileID) ~= "" and trim(source.profileID) or nil,
@@ -232,6 +245,9 @@ function DC_CompanionLootModal:setCurrentConfig(config)
     end
 
     self.includeWorldContainers = nextConfig.includeWorldContainers ~= false
+    self.includeLooseWorldItems = nextConfig.includeLooseWorldItems ~= false
+    self.includeGroundContainers = nextConfig.includeGroundContainers ~= false
+    self.includeFurnitureContainers = nextConfig.includeFurnitureContainers ~= false
     self.includeCorpseContainers = nextConfig.includeCorpseContainers ~= false
     self.includeVehicleContainers = nextConfig.includeVehicleContainers ~= false
 
@@ -245,6 +261,9 @@ function DC_CompanionLootModal:buildCurrentConfig()
     return cloneLootConfig({
         radius = self.radiusEntry and self.radiusEntry:getText() or DEFAULT_RADIUS,
         includeWorldContainers = self.includeWorldContainers ~= false,
+        includeLooseWorldItems = self.includeLooseWorldItems ~= false,
+        includeGroundContainers = self.includeGroundContainers ~= false,
+        includeFurnitureContainers = self.includeFurnitureContainers ~= false,
         includeCorpseContainers = self.includeCorpseContainers ~= false,
         includeVehicleContainers = self.includeVehicleContainers ~= false,
         profileID = profileOption and profileOption.id or nil,
@@ -289,10 +308,22 @@ end
 
 function DC_CompanionLootModal:updateContainerButtons()
     self:applyToggleStyle(
-        self.btnWorldContainers,
-        self.includeWorldContainers ~= false,
-        "World: On",
-        "World: Off"
+        self.btnLooseWorldItems,
+        self.includeLooseWorldItems ~= false,
+        "Ground Items: On",
+        "Ground Items: Off"
+    )
+    self:applyToggleStyle(
+        self.btnGroundContainers,
+        self.includeGroundContainers ~= false,
+        "Ground Bags: On",
+        "Ground Bags: Off"
+    )
+    self:applyToggleStyle(
+        self.btnFurnitureContainers,
+        self.includeFurnitureContainers ~= false,
+        "Furniture: On",
+        "Furniture: Off"
     )
     self:applyToggleStyle(
         self.btnCorpseContainers,
@@ -320,7 +351,8 @@ function DC_CompanionLootModal:createChildren()
     local rightColumnX = pad + halfWidth + columnGap
     local profileRowY = contentY + 50
     local containerRowY = profileRowY + 54
-    local queryLabelY = containerRowY + 56
+    local containerRowTwoY = containerRowY + 30
+    local queryLabelY = containerRowTwoY + 42
     local queryRowY = queryLabelY + 20
     local listLabelY = queryRowY + 40
     local listY = listLabelY + 18
@@ -388,17 +420,27 @@ function DC_CompanionLootModal:createChildren()
     self.containerLabel:instantiate()
     self:addChild(self.containerLabel)
 
-    self.btnWorldContainers = ISButton:new(pad, containerRowY, 120, 24, "", self, self.onToggleWorldContainers)
-    self.btnWorldContainers:initialise()
-    self.btnWorldContainers:instantiate()
-    self:addChild(self.btnWorldContainers)
+    self.btnLooseWorldItems = ISButton:new(pad, containerRowY, 120, 24, "", self, self.onToggleLooseWorldItems)
+    self.btnLooseWorldItems:initialise()
+    self.btnLooseWorldItems:instantiate()
+    self:addChild(self.btnLooseWorldItems)
 
-    self.btnCorpseContainers = ISButton:new(pad + 130, containerRowY, 120, 24, "", self, self.onToggleCorpseContainers)
+    self.btnGroundContainers = ISButton:new(pad + 130, containerRowY, 120, 24, "", self, self.onToggleGroundContainers)
+    self.btnGroundContainers:initialise()
+    self.btnGroundContainers:instantiate()
+    self:addChild(self.btnGroundContainers)
+
+    self.btnFurnitureContainers = ISButton:new(pad + 260, containerRowY, 120, 24, "", self, self.onToggleFurnitureContainers)
+    self.btnFurnitureContainers:initialise()
+    self.btnFurnitureContainers:instantiate()
+    self:addChild(self.btnFurnitureContainers)
+
+    self.btnCorpseContainers = ISButton:new(pad, containerRowTwoY, 120, 24, "", self, self.onToggleCorpseContainers)
     self.btnCorpseContainers:initialise()
     self.btnCorpseContainers:instantiate()
     self:addChild(self.btnCorpseContainers)
 
-    self.btnVehicleContainers = ISButton:new(pad + 260, containerRowY, 120, 24, "", self, self.onToggleVehicleContainers)
+    self.btnVehicleContainers = ISButton:new(pad + 130, containerRowTwoY, 120, 24, "", self, self.onToggleVehicleContainers)
     self.btnVehicleContainers:initialise()
     self.btnVehicleContainers:instantiate()
     self:addChild(self.btnVehicleContainers)
@@ -491,7 +533,7 @@ function DC_CompanionLootModal:createChildren()
         pad,
         noteY,
         20,
-        "Items will match the selected preset and any raw tag queries you add here.",
+        "Companions only loot items matching your preset or tag queries. Empty filters will not start looting.",
         0.72,
         0.72,
         0.72,
@@ -509,8 +551,27 @@ end
 function DC_CompanionLootModal:onProfileChanged()
 end
 
-function DC_CompanionLootModal:onToggleWorldContainers()
-    self.includeWorldContainers = not (self.includeWorldContainers ~= false)
+function DC_CompanionLootModal:onToggleLooseWorldItems()
+    self.includeLooseWorldItems = not (self.includeLooseWorldItems ~= false)
+    self.includeWorldContainers = self.includeLooseWorldItems ~= false
+        or self.includeGroundContainers ~= false
+        or self.includeFurnitureContainers ~= false
+    self:updateContainerButtons()
+end
+
+function DC_CompanionLootModal:onToggleGroundContainers()
+    self.includeGroundContainers = not (self.includeGroundContainers ~= false)
+    self.includeWorldContainers = self.includeLooseWorldItems ~= false
+        or self.includeGroundContainers ~= false
+        or self.includeFurnitureContainers ~= false
+    self:updateContainerButtons()
+end
+
+function DC_CompanionLootModal:onToggleFurnitureContainers()
+    self.includeFurnitureContainers = not (self.includeFurnitureContainers ~= false)
+    self.includeWorldContainers = self.includeLooseWorldItems ~= false
+        or self.includeGroundContainers ~= false
+        or self.includeFurnitureContainers ~= false
     self:updateContainerButtons()
 end
 
@@ -617,6 +678,9 @@ function DC_CompanionLootModal:new(x, y, width, height, args)
     o.allTags = buildAvailableTags()
     o.selectedTags = {}
     o.includeWorldContainers = true
+    o.includeLooseWorldItems = true
+    o.includeGroundContainers = true
+    o.includeFurnitureContainers = true
     o.includeCorpseContainers = true
     o.includeVehicleContainers = true
     o.lastTagFilter = ""

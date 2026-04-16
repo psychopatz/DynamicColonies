@@ -85,7 +85,20 @@ local function buildCompanionLootStatus(config)
     local profile = colonyConfig.GetScavengeSiteProfile and colonyConfig.GetScavengeSiteProfile(config.profileID) or nil
     local profileLabel = config.profileID and tostring(profile and profile.displayName or config.profileID) or "no preset"
     local tagCount = #(config.rawTags or {})
-    return "preset " .. profileLabel .. ", " .. tostring(tagCount) .. " tag queries"
+    local sourceCount = 0
+    local sourceFlags = {
+        config.includeLooseWorldItems ~= false,
+        config.includeGroundContainers ~= false,
+        config.includeFurnitureContainers ~= false,
+        config.includeCorpseContainers ~= false,
+        config.includeVehicleContainers ~= false,
+    }
+    for _, enabled in ipairs(sourceFlags) do
+        if enabled then
+            sourceCount = sourceCount + 1
+        end
+    end
+    return "preset " .. profileLabel .. ", " .. tostring(tagCount) .. " tag queries, " .. tostring(sourceCount) .. " sources"
 end
 
 local function addUniqueUsername(list, seen, username)
@@ -527,7 +540,7 @@ function DC_MainWindow:onOpenCompanionLootConfig()
     DC_CompanionLootModal.Open({
         worker = worker,
         title = "Companion Loot Setup",
-        promptText = "Configure how " .. workerName .. " should filter nearby loot containers.",
+        promptText = "Configure how " .. workerName .. " should filter nearby loot sources.",
         onSave = function(lootConfig)
             self:sendColonyCommand("SetWorkerCompanionLootConfig", {
                 workerID = worker.workerID,

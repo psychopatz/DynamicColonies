@@ -101,8 +101,14 @@ local function buildCompanionLootSummary(worker, config)
     local profile = config.GetScavengeSiteProfile and config.GetScavengeSiteProfile(lootConfig.profileID) or nil
     local profileLabel = lootConfig.profileID and tostring(profile and profile.displayName or lootConfig.profileID) or "No preset"
     local sources = {}
-    if lootConfig.includeWorldContainers ~= false then
-        sources[#sources + 1] = "World"
+    if lootConfig.includeLooseWorldItems ~= false then
+        sources[#sources + 1] = "Ground Items"
+    end
+    if lootConfig.includeGroundContainers ~= false then
+        sources[#sources + 1] = "Ground Bags"
+    end
+    if lootConfig.includeFurnitureContainers ~= false then
+        sources[#sources + 1] = "Furniture"
     end
     if lootConfig.includeCorpseContainers ~= false then
         sources[#sources + 1] = "Corpses"
