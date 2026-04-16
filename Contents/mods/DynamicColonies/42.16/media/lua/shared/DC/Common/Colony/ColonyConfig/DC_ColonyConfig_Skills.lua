@@ -4,6 +4,8 @@ DC_Colony.Config = DC_Colony.Config or {}
 local Config = DC_Colony.Config
 
 Config.SKILL_MODEL_VERSION = 4
+Config.DEFAULT_COMPANION_COMBAT_XP_MELEE_PER_ATTACK = 1
+Config.DEFAULT_COMPANION_COMBAT_XP_RANGED_PER_ATTACK = 1
 
 Config.SkillDefinitions = {}
 Config.SkillOrder = {}
@@ -75,6 +77,17 @@ function Config.GetWorkerJobSkillID(worker, profile)
         return Config.GetScavengeSiteSkillID(worker and worker.scavengeSiteProfileID)
     end
     return nil
+end
+
+function Config.GetCompanionCombatXPPerAttack(attackType, worker)
+    local mode = tostring(attackType or "")
+    if mode == "ranged" then
+        return math.max(0, tonumber(Config.DEFAULT_COMPANION_COMBAT_XP_RANGED_PER_ATTACK) or 1)
+    end
+    if mode == "melee" then
+        return math.max(0, tonumber(Config.DEFAULT_COMPANION_COMBAT_XP_MELEE_PER_ATTACK) or 1)
+    end
+    return 0
 end
 
 return Config

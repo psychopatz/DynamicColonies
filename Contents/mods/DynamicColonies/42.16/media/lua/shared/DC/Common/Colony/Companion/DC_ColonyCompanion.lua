@@ -174,6 +174,64 @@ local function getWorkerSkillLevel(worker, skillID)
     return math.max(0, math.floor(tonumber(entry and entry.level) or 0))
 end
 
+local function getSkillsModule()
+    local skills = DC_Colony and DC_Colony.Skills or nil
+    if skills and skills.GrantXP and skills.EnsureWorkerSkills then
+        return skills
+    end
+
+    pcall(function()
+        require "DC/Common/Colony/ColonySkills/DC_ColonySkills"
+    end)
+
+    skills = DC_Colony and DC_Colony.Skills or nil
+    if skills and skills.GrantXP and skills.EnsureWorkerSkills then
+        return skills
+    end
+
+    return nil
+end
+
+local function getCompanionCombatSkillID(attackType)
+    local mode = tostring(attackType or "")
+    if mode == "ranged" then
+        return "Shooting"
+    end
+    if mode == "melee" then
+        return "Melee"
+    end
+    return nil
+end
+
+local function getCompanionCombatDrainPerAttack(worker, attackType)
+    local skillID = getCompanionCombatSkillID(attackType)
+    if not skillID then
+        return 0, nil, 0, 1
+    end
+
+    local skillLevel = getWorkerSkillLevel(worker, skillID)
+    local baseDrain
+    if skillID == "Shooting" then
+        baseDrain = (Config.GetEnergyRangedCombatDrainPerAttack and Config.GetEnergyRangedCombatDrainPerAttack(worker))
+            or (Config.GetTirednessRangedCombatDrainPerAttack and Config.GetTirednessRangedCombatDrainPerAttack(worker))
+            or 0.70
+    else
+        baseDrain = (Config.GetEnergyMeleeCombatDrainPerAttack and Config.GetEnergyMeleeCombatDrainPerAttack(worker))
+            or (Config.GetTirednessMeleeCombatDrainPerAttack and Config.GetTirednessMeleeCombatDrainPerAttack(worker))
+            or 0.90
+    end
+
+    local reductionPerLevel = (Config.GetEnergyCombatDrainReductionPerSkillLevel and Config.GetEnergyCombatDrainReductionPerSkillLevel(worker))
+        or (Config.GetTirednessCombatDrainReductionPerSkillLevel and Config.GetTirednessCombatDrainReductionPerSkillLevel(worker))
+        or 0.025
+    local minMultiplier = (Config.GetEnergyCombatDrainMinMultiplier and Config.GetEnergyCombatDrainMinMultiplier(worker))
+        or (Config.GetTirednessCombatDrainMinMultiplier and Config.GetTirednessCombatDrainMinMultiplier(worker))
+        or 0.35
+
+    local multiplier = math.max(minMultiplier, 1 - (skillLevel * reductionPerLevel))
+    return math.max(0, baseDrain * multiplier), skillID, skillLevel, multiplier
+end
+
 local function getTravelHours()
     local internal = DC_Colony and DC_Colony.Sim and DC_Colony.Sim.Internal or nil
     if internal and internal.getScavengeTravelHours then
@@ -716,6 +774,59 @@ function Companion.CanWorkerBeCompanion(worker)
     return true, nil
 end
 
+local function canWorkerStartCompanionNow(worker)
+    if not worker then
+        return false, "Companion start is unavailable."
+    end
+
+    local homeState = tostring((Config.PresenceStates or {}).Home or "Home")
+    if tostring(worker.presenceState or "") ~= homeState then
+        return false, "Travel Companion can only start when the worker is at home."
+    end
+
+    local states = Config.States or {}
+    local currentState = tostring(worker.state or "")
+    if currentState == tostring(states.Incapacitated or "Incapacitated") then
+        return false, "Worker is incapacitated and must recover first."
+    end
+    if currentState == tostring(states.Dead or "Dead") then
+        return false, "Worker is dead and cannot start companion duty."
+    end
+    if currentState == tostring(states.Starving or "Starving") then
+        return false, "Worker is hungry and must eat before companion duty."
+    end
+    if currentState == tostring(states.Dehydrated or "Dehydrated") then
+        return false, "Worker is thirsty and must drink before companion duty."
+    end
+
+    local returnReason = tostring(worker.returnReason or "")
+    local returnReasons = Config.ReturnReasons or {}
+    if returnReason == tostring(returnReasons.LowFood or "LowFood") then
+        return false, "Worker is hungry and must eat before companion duty."
+    end
+    if returnReason == tostring(returnReasons.LowDrink or "LowDrink") then
+        return false, "Worker is thirsty and must drink before companion duty."
+    end
+
+    local energy = DC_Colony and DC_Colony.Energy or nil
+    if energy and ((energy.IsForcedRest and energy.IsForcedRest(worker)) or (energy.IsDepleted and energy.IsDepleted(worker))) then
+        return false, "Worker is too tired and must rest before companion duty."
+    end
+
+    local nutrition = DC_Colony and DC_Colony.Nutrition or nil
+    if nutrition and nutrition.GetOnBodyTotals then
+        local calories, hydration = nutrition.GetOnBodyTotals(worker)
+        if (tonumber(calories) or 0) <= 0 then
+            return false, "Worker is hungry and must eat before companion duty."
+        end
+        if (tonumber(hydration) or 0) <= 0 then
+            return false, "Worker is thirsty and must drink before companion duty."
+        end
+    end
+
+    return true, nil
+end
+
 function Companion.GetWorkerTravelHours(worker)
     return getTravelHours()
 end
@@ -1002,6 +1113,12 @@ function Companion.StartWorkerCompanion(player, worker)
     if not okay then
         debugCompanion("StartWorkerCompanion capability check failed workerID=" .. tostring(worker.workerID) .. " reason=" .. tostring(reason))
         return false, reason
+    end
+
+    local ready, readyReason = canWorkerStartCompanionNow(worker)
+    if not ready then
+        debugCompanion("StartWorkerCompanion readiness check failed workerID=" .. tostring(worker.workerID) .. " reason=" .. tostring(readyReason))
+        return false, readyReason
     end
 
     local uuid, err, createdFresh = createCompanionSoul(worker)
@@ -1331,6 +1448,78 @@ function Companion.ConsumeBandageSupply(workerID)
     }
 end
 
+function Companion.RecordCombatAttack(workerID, npcData, attackType, options)
+    local registry = getRegistry()
+    local worker = workerID and registry and registry.GetWorkerRaw and registry.GetWorkerRaw(workerID) or nil
+    if not worker or not Companion.IsTravelCompanionWorker(worker) then
+        return false
+    end
+
+    local skillID = getCompanionCombatSkillID(attackType)
+    if not skillID then
+        return false
+    end
+
+    local energy = DC_Colony and DC_Colony.Energy or nil
+    local beforeEnergy = energy and energy.GetCurrent and energy.GetCurrent(worker) or nil
+    local drainAmount, _, skillLevel, drainMultiplier = getCompanionCombatDrainPerAttack(worker, attackType)
+    local energyApplied = false
+    if energy and energy.SetCurrent and beforeEnergy ~= nil and drainAmount > 0 then
+        energy.SetCurrent(worker, beforeEnergy - drainAmount)
+        energyApplied = true
+    end
+
+    local skills = getSkillsModule()
+    local xpAmount = Config.GetCompanionCombatXPPerAttack and Config.GetCompanionCombatXPPerAttack(attackType, worker) or 1
+    local xpResult = nil
+    if skills and skills.EnsureWorkerSkills then
+        skills.EnsureWorkerSkills(worker)
+    end
+    if skills and skills.GrantXP and xpAmount > 0 then
+        xpResult = skills.GrantXP(worker, skillID, xpAmount)
+    end
+
+    if registry and registry.RecalculateWorker then
+        registry.RecalculateWorker(worker)
+    end
+
+    local xpGranted = tonumber(xpResult and xpResult.granted) or 0
+    local leveledUp = tonumber(xpResult and xpResult.leveledUp) or 0
+    if energyApplied or xpGranted > 0 then
+        local companionData = getCompanionData(worker)
+        local currentMs = getCurrentMillis()
+        local lastSavedAt = tonumber(companionData and companionData.combatProgressSavedAt) or 0
+        local shouldSaveNow = leveledUp > 0
+            or currentMs <= 0
+            or lastSavedAt <= 0
+            or (currentMs - lastSavedAt) >= 4000
+
+        if shouldSaveNow then
+            if companionData then
+                companionData.combatProgressSavedAt = currentMs
+            end
+            saveRegistry()
+        end
+    end
+
+    if energy and energy.IsDepleted and energy.IsDepleted(worker) then
+        local lowEnergyReason = Config.ReturnReasons and (Config.ReturnReasons.LowEnergy or Config.ReturnReasons.LowTiredness) or "LowEnergy"
+        if energy.BeginForcedRest then
+            energy.BeginForcedRest(worker, getCurrentWorldHours(), lowEnergyReason, "Too tired for companion duty. Returning home to rest.")
+        end
+        Companion.BeginWorkerCompanionReturn(nil, worker, lowEnergyReason)
+    end
+
+    return true, {
+        attackType = attackType,
+        skillID = skillID,
+        skillLevel = skillLevel,
+        drainApplied = drainAmount,
+        drainMultiplier = drainMultiplier,
+        xpResult = xpResult,
+    }
+end
+
 function Companion.UpdateTravelCompanionWorker(worker, ctx)
     if not worker or not Companion.IsTravelCompanionWorker(worker) then
         return false
@@ -1395,12 +1584,24 @@ function Companion.UpdateTravelCompanionWorker(worker, ctx)
         if tostring(worker.presenceState or "") ~= presenceState then
             return true
         end
+        if not worker.jobEnabled then
+            Companion.BeginWorkerCompanionReturn(nil, worker, Config.ReturnReasons.Manual)
+            return true
+        end
         worker.travelHoursRemaining = math.max(0, tonumber(worker.travelHoursRemaining) or 0)
         if deltaHours > 0 then
             worker.travelHoursRemaining = math.max(0, worker.travelHoursRemaining - deltaHours)
         end
         if energy and deltaHours > 0 then
             energy.ApplyTravelDrain(worker, deltaHours, profile)
+        end
+        if energy and energy.IsDepleted and energy.IsDepleted(worker) then
+            local lowEnergyReason = Config.ReturnReasons and (Config.ReturnReasons.LowEnergy or Config.ReturnReasons.LowTiredness) or "LowEnergy"
+            if energy.BeginForcedRest then
+                energy.BeginForcedRest(worker, currentHour, lowEnergyReason, "Too tired to reach your position. Returning home to rest.")
+            end
+            Companion.BeginWorkerCompanionReturn(nil, worker, lowEnergyReason)
+            return true
         end
         if worker.travelHoursRemaining <= 0 then
             Companion.MarkCompanionActive(worker)
@@ -1448,7 +1649,11 @@ function Companion.UpdateTravelCompanionWorker(worker, ctx)
         elseif not hasCalories then
             Companion.BeginWorkerCompanionReturn(nil, worker, Config.ReturnReasons.LowFood)
         elseif forcedRest or (energy and energy.IsDepleted and energy.IsDepleted(worker)) then
-            Companion.BeginWorkerCompanionReturn(nil, worker, Config.ReturnReasons.LowEnergy)
+            local lowEnergyReason = Config.ReturnReasons and (Config.ReturnReasons.LowEnergy or Config.ReturnReasons.LowTiredness) or "LowEnergy"
+            if energy and energy.BeginForcedRest then
+                energy.BeginForcedRest(worker, currentHour, lowEnergyReason, "Too tired for companion duty. Returning home to rest.")
+            end
+            Companion.BeginWorkerCompanionReturn(nil, worker, lowEnergyReason)
         else
             worker.state = Config.States.Working
             companionData.stage = TRAVEL_STAGE_ACTIVE

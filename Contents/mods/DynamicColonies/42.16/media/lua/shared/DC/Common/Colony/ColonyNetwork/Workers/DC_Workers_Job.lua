@@ -74,13 +74,7 @@ Network.Handlers.SetWorkerJobEnabled = function(player, args)
     end
 
     if args.enabled ~= true and normalizedJob == ((Config.JobTypes or {}).TravelCompanion) then
-        local canCommand, commandReason = Companion.CanPlayerCommandCompanion(player, worker)
         local homeState = tostring((Config.PresenceStates or {}).Home or "Home")
-        if tostring(worker.presenceState or "") ~= homeState and not canCommand then
-            Internal.syncNotice(player, commandReason or "Only the current commander can send this companion home.", "error", true)
-            Shared.saveAndRefreshBasic(player, worker)
-            return
-        end
         if tostring(worker.presenceState or "") ~= homeState then
             debugWorkerJob("Starting companion return workerID=" .. tostring(args.workerID))
             Companion.BeginWorkerCompanionReturn(player, worker, Config.ReturnReasons.Manual)
