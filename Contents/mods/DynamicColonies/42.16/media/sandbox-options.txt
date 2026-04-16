@@ -33,9 +33,9 @@ option DynamicColonies.ColonyDailyHydrationUse
 option DynamicColonies.ColonyBaseCarryWeight
 {
     type = double,
-    default = 8.0,
+    default = 30.0,
     min = 1.0,
-    max = 50.0,
+    max = 150.0,
     page = DynamicColoniesLabour,
     translation = DynamicColonies.ColonyBaseCarryWeight,
 }
@@ -43,7 +43,7 @@ option DynamicColonies.ColonyBaseCarryWeight
 option DynamicColonies.ColonyScavengeTravelHours
 {
     type = double,
-    default = 2.0,
+    default = 1.0,
     min = 0.1,
     max = 24.0,
     page = DynamicColoniesLabour,

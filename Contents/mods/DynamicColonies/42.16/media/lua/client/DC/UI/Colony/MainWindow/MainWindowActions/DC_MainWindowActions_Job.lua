@@ -81,10 +81,6 @@ end
 
 local function buildCompanionLootStatus(config)
     config = type(config) == "table" and config or {}
-    local colonyConfig = getConfig()
-    local profile = colonyConfig.GetScavengeSiteProfile and colonyConfig.GetScavengeSiteProfile(config.profileID) or nil
-    local profileLabel = config.profileID and tostring(profile and profile.displayName or config.profileID) or "no preset"
-    local tagCount = #(config.rawTags or {})
     local sourceCount = 0
     local sourceFlags = {
         config.includeLooseWorldItems ~= false,
@@ -98,7 +94,7 @@ local function buildCompanionLootStatus(config)
             sourceCount = sourceCount + 1
         end
     end
-    return "preset " .. profileLabel .. ", " .. tostring(tagCount) .. " tag queries, " .. tostring(sourceCount) .. " sources"
+    return "radius " .. tostring(config.radius or 10) .. ", " .. tostring(sourceCount) .. " sources"
 end
 
 local function addUniqueUsername(list, seen, username)

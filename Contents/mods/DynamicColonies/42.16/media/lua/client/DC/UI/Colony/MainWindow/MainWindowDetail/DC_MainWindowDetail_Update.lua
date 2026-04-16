@@ -98,8 +98,6 @@ end
 
 local function buildCompanionLootSummary(worker, config)
     local lootConfig = getCompanionLootConfig(worker) or {}
-    local profile = config.GetScavengeSiteProfile and config.GetScavengeSiteProfile(lootConfig.profileID) or nil
-    local profileLabel = lootConfig.profileID and tostring(profile and profile.displayName or lootConfig.profileID) or "No preset"
     local sources = {}
     if lootConfig.includeLooseWorldItems ~= false then
         sources[#sources + 1] = "Ground Items"
@@ -120,9 +118,7 @@ local function buildCompanionLootSummary(worker, config)
         sources[#sources + 1] = "None"
     end
 
-    return "Preset " .. profileLabel
-        .. " | Tags " .. tostring(#(lootConfig.rawTags or {}))
-        .. " | Radius " .. tostring(lootConfig.radius or 10)
+    return "Radius " .. tostring(lootConfig.radius or 10)
         .. " | Sources " .. table.concat(sources, ", ")
 end
 

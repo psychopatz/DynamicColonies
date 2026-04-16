@@ -50,11 +50,6 @@ end
 
 function Internal.NormalizeCompanionLootConfig(config)
     local source = type(config) == "table" and config or {}
-    local profileID = tostring(source.profileID or source.selectedProfileID or source.presetID or "")
-    if profileID == "" then
-        profileID = nil
-    end
-
     local includeWorldContainers = source.includeWorldContainers ~= false
     local includeLooseWorldItems = source.includeLooseWorldItems ~= nil
         and source.includeLooseWorldItems ~= false
@@ -74,8 +69,8 @@ function Internal.NormalizeCompanionLootConfig(config)
         includeFurnitureContainers = includeFurnitureContainers,
         includeCorpseContainers = source.includeCorpseContainers ~= false,
         includeVehicleContainers = source.includeVehicleContainers ~= false,
-        profileID = profileID,
-        rawTags = normalizeStringArray(source.rawTags or source.tags or {})
+        profileID = nil,
+        rawTags = {}
     }
 end
 
@@ -89,8 +84,8 @@ function Internal.CloneCompanionLootConfig(config)
         includeFurnitureContainers = normalized.includeFurnitureContainers,
         includeCorpseContainers = normalized.includeCorpseContainers,
         includeVehicleContainers = normalized.includeVehicleContainers,
-        profileID = normalized.profileID,
-        rawTags = normalizeStringArray(normalized.rawTags)
+        profileID = nil,
+        rawTags = {}
     }
 end
 
