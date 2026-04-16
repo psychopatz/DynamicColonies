@@ -247,6 +247,13 @@ function ColonyProfileCard:prerender()
         self.ownerWindow.btnCycleJob:setY(nextButtonY)
         self.ownerWindow.btnCycleJob:setWidth(portraitSize)
         self.ownerWindow.btnCycleJob:setHeight(actionButtonHeight)
+        nextButtonY = nextButtonY + actionButtonHeight + 6
+    end
+    if self.ownerWindow and self.ownerWindow.btnCompanionLootConfig then
+        self.ownerWindow.btnCompanionLootConfig:setX(portraitX)
+        self.ownerWindow.btnCompanionLootConfig:setY(nextButtonY)
+        self.ownerWindow.btnCompanionLootConfig:setWidth(portraitSize)
+        self.ownerWindow.btnCompanionLootConfig:setHeight(actionButtonHeight)
     end
 
     self:drawReserveBar(

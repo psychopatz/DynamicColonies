@@ -27,6 +27,8 @@ function Internal.SyncNPCFromWorker(worker, uuid)
         y = worker.homeY or 0,
         z = worker.homeZ or 0,
     }
+    npcData.dcLootConfig = Internal.CloneCompanionLootConfig and Internal.CloneCompanionLootConfig(Internal.GetCompanionLootConfig(worker))
+        or Internal.GetCompanionLootConfig(worker)
     npcData.loadout = Internal.BuildLoadoutFromWorker(worker)
     Internal.BuildHealthSeed(worker, npcData)
     Internal.SetSoulCompanionFlags(worker, npcData, worker.presenceState == Config.PresenceStates.CompanionActive)
@@ -60,6 +62,7 @@ function Internal.SyncActiveNPCFromWorker(worker, shouldBroadcast)
             loadout = npcData.loadout,
             combatHealth = npcData.combatHealth,
             restingRegenMultiplier = npcData.restingRegenMultiplier,
+            dcLootConfig = npcData.dcLootConfig,
         }, shouldBroadcast ~= false)
         liveSynced = changed == true
         Internal.Debug(

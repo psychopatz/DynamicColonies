@@ -70,6 +70,24 @@ local function getCompanionCommander(worker)
     return username ~= "" and username or nil
 end
 
+local function getCompanionLootConfig(worker)
+    local companionInternal = DC_Colony and DC_Colony.Companion and DC_Colony.Companion.Internal or nil
+    if companionInternal and companionInternal.GetCompanionLootConfig then
+        return companionInternal.GetCompanionLootConfig(worker)
+    end
+    local companionData = type(worker and worker.companion) == "table" and worker.companion or {}
+    return type(companionData.lootConfig) == "table" and companionData.lootConfig or nil
+end
+
+local function buildCompanionLootStatus(config)
+    config = type(config) == "table" and config or {}
+    local colonyConfig = getConfig()
+    local profile = colonyConfig.GetScavengeSiteProfile and colonyConfig.GetScavengeSiteProfile(config.profileID) or nil
+    local profileLabel = config.profileID and tostring(profile and profile.displayName or config.profileID) or "no preset"
+    local tagCount = #(config.rawTags or {})
+    return "preset " .. profileLabel .. ", " .. tostring(tagCount) .. " tag queries"
+end
+
 local function addUniqueUsername(list, seen, username)
     username = tostring(username or "")
     if username == "" or seen[username] then
@@ -484,6 +502,40 @@ function DC_MainWindow:onCompanionCommand()
             self:updateStatus("Transferring companion command to " .. tostring(username) .. "...")
         end)
     end
+end
+
+function DC_MainWindow:onOpenCompanionLootConfig()
+    local worker = getSelectedWorkerForAction(self)
+    if not worker or not worker.workerID then
+        self:updateStatus("Select a companion worker first.")
+        return
+    end
+
+    local config = getConfig()
+    local normalizedJob = config.NormalizeJobType and config.NormalizeJobType(worker.jobType) or tostring(worker.jobType or "")
+    if normalizedJob ~= tostring((config.JobTypes or {}).TravelCompanion or "TravelCompanion") then
+        self:updateStatus("Loot setup is only available for Travel Companion workers.")
+        return
+    end
+
+    if not DC_CompanionLootModal or not DC_CompanionLootModal.Open then
+        self:updateStatus("The companion loot setup modal is unavailable right now.")
+        return
+    end
+
+    local workerName = tostring(worker.name or worker.workerID or "Companion")
+    DC_CompanionLootModal.Open({
+        worker = worker,
+        title = "Companion Loot Setup",
+        promptText = "Configure how " .. workerName .. " should filter nearby loot containers.",
+        onSave = function(lootConfig)
+            self:sendColonyCommand("SetWorkerCompanionLootConfig", {
+                workerID = worker.workerID,
+                lootConfig = lootConfig
+            })
+            self:updateStatus("Saving loot setup for " .. workerName .. " with " .. buildCompanionLootStatus(lootConfig) .. "...")
+        end
+    })
 end
 
 function DC_MainWindow:onToggleJob()

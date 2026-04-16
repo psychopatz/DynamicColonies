@@ -158,6 +158,57 @@ Network.Handlers.SetWorkerJobType = function(player, args)
     Shared.saveAndRefreshProcessed(player, worker)
 end
 
+Network.Handlers.SetWorkerCompanionLootConfig = function(player, args)
+    if not args or not args.workerID then
+        return
+    end
+
+    if not isTravelCompanionSupported() then
+        Internal.syncNotice(player, "Travel Companion requires Dynamic Trading V2.", "error", true)
+        Internal.syncWorkerList(player)
+        return
+    end
+
+    local owner = Config.GetOwnerUsername(player)
+    local worker = Registry.GetWorkerForOwner(owner, args.workerID)
+    if not worker then
+        return
+    end
+
+    local normalizedJob = Config.NormalizeJobType and Config.NormalizeJobType(worker.jobType) or tostring(worker.jobType or "")
+    if normalizedJob ~= tostring((Config.JobTypes or {}).TravelCompanion or "TravelCompanion") then
+        Internal.syncNotice(player, "Loot setup is only available for Travel Companion workers.", "error")
+        Shared.saveAndRefreshBasic(player, worker)
+        return
+    end
+
+    local companionInternal = Companion and Companion.Internal or nil
+    local companionData = companionInternal and companionInternal.GetCompanionData and companionInternal.GetCompanionData(worker) or nil
+    if not companionData then
+        Internal.syncNotice(player, "Unable to update that companion right now.", "error")
+        Shared.saveAndRefreshBasic(player, worker)
+        return
+    end
+
+    local lootConfig = companionInternal and companionInternal.NormalizeCompanionLootConfig
+        and companionInternal.NormalizeCompanionLootConfig(args.lootConfig or args.config or {})
+        or (args.lootConfig or args.config or {})
+
+    companionData.lootConfig = lootConfig
+
+    local profile = Config.GetScavengeSiteProfile and Config.GetScavengeSiteProfile(lootConfig.profileID) or nil
+    local profileLabel = lootConfig.profileID and tostring(profile and profile.displayName or lootConfig.profileID) or "no preset"
+    local tagCount = #(lootConfig.rawTags or {})
+
+    Internal.syncNotice(
+        player,
+        "Saved companion loot setup: " .. profileLabel .. ", " .. tostring(tagCount) .. " tag queries.",
+        "info",
+        false
+    )
+    Shared.saveAndRefreshBasic(player, worker)
+end
+
 Network.Handlers.ClaimCompanionCommand = function(player, args)
     if not args or not args.workerID then return end
     if not isTravelCompanionSupported() then

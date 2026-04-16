@@ -127,6 +127,11 @@ function DC_MainWindow:createChildren()
     self.btnCycleJob:setEnable(false)
     self.reservePanel:addChild(self.btnCycleJob)
 
+    self.btnCompanionLootConfig = ISButton:new(0, 0, 96, 24, "Loot Setup", self, self.onOpenCompanionLootConfig)
+    self.btnCompanionLootConfig:initialise()
+    self.btnCompanionLootConfig:setEnable(false)
+    self.reservePanel:addChild(self.btnCompanionLootConfig)
+
     self.detailPanel = ISPanel:new(rightX, detailY, rightWidth, detailHeight)
     self.detailPanel:initialise()
     self.detailPanel.backgroundColor = { r = 0, g = 0, b = 0, a = 0.2 }

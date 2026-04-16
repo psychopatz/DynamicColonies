@@ -87,6 +87,39 @@ local function getCompanionCommander(worker)
     return username ~= "" and username or nil
 end
 
+local function getCompanionLootConfig(worker)
+    local companionInternal = DC_Colony and DC_Colony.Companion and DC_Colony.Companion.Internal or nil
+    if companionInternal and companionInternal.GetCompanionLootConfig then
+        return companionInternal.GetCompanionLootConfig(worker)
+    end
+    local companionData = type(worker and worker.companion) == "table" and worker.companion or {}
+    return type(companionData.lootConfig) == "table" and companionData.lootConfig or nil
+end
+
+local function buildCompanionLootSummary(worker, config)
+    local lootConfig = getCompanionLootConfig(worker) or {}
+    local profile = config.GetScavengeSiteProfile and config.GetScavengeSiteProfile(lootConfig.profileID) or nil
+    local profileLabel = lootConfig.profileID and tostring(profile and profile.displayName or lootConfig.profileID) or "No preset"
+    local sources = {}
+    if lootConfig.includeWorldContainers ~= false then
+        sources[#sources + 1] = "World"
+    end
+    if lootConfig.includeCorpseContainers ~= false then
+        sources[#sources + 1] = "Corpses"
+    end
+    if lootConfig.includeVehicleContainers ~= false then
+        sources[#sources + 1] = "Vehicles"
+    end
+    if #sources == 0 then
+        sources[#sources + 1] = "None"
+    end
+
+    return "Preset " .. profileLabel
+        .. " | Tags " .. tostring(#(lootConfig.rawTags or {}))
+        .. " | Radius " .. tostring(lootConfig.radius or 10)
+        .. " | Sources " .. table.concat(sources, ", ")
+end
+
 local function buildActivityLogText(worker)
     if isFunction(Internal.buildActivityLogText) then
         return Internal.buildActivityLogText(worker)
@@ -188,6 +221,9 @@ function DC_MainWindow:updateWorkerDetail(worker)
             self.btnCompanionCommand:setTitle("Command")
             self.btnCompanionCommand:setEnable(false)
         end
+        if self.btnCompanionLootConfig then
+            self.btnCompanionLootConfig:setEnable(false)
+        end
         return
     end
 
@@ -212,6 +248,9 @@ function DC_MainWindow:updateWorkerDetail(worker)
     if normalizedJobType == (config.JobTypes and config.JobTypes.TravelCompanion) and Internal.getCompanionCommandStatus then
         text = text .. " <RGB:0.72,0.72,0.72> Companion Command: <RGB:1,1,1> "
             .. tostring(Internal.getCompanionCommandStatus(worker) or "No commander")
+            .. " <LINE> "
+        text = text .. " <RGB:0.72,0.72,0.72> Loot Setup: <RGB:1,1,1> "
+            .. buildCompanionLootSummary(worker, config)
             .. " <LINE> "
     end
     text = text .. " <RGB:0.72,0.72,0.72> Tool State: <RGB:1,1,1> " .. tostring(worker.toolState or "Missing") .. " <LINE> "
@@ -313,5 +352,11 @@ function DC_MainWindow:updateWorkerDetail(worker)
             self.btnCompanionCommand:setTitle("Command")
         end
         self.btnCompanionCommand:setEnable(canUseCompanionCommand)
+    end
+
+    if self.btnCompanionLootConfig then
+        local canConfigureLoot = normalizedJobType == (config.JobTypes and config.JobTypes.TravelCompanion)
+            and stateLabel ~= deadState
+        self.btnCompanionLootConfig:setEnable(canConfigureLoot)
     end
 end
